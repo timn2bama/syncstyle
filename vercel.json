@@ -11,6 +11,24 @@
     { "source": "/api/auth/(.*)", "destination": "/api/auth/[...auth]" },
     { "source": "/api/wardrobe/:id", "destination": "/api/wardrobe/[id]" },
     { "source": "/api/outfits/:id", "destination": "/api/outfits/[id]" },
-    { "source": "/api/marketplace/:id", "destination": "/api/marketplace/[id]" }
+    { "source": "/api/marketplace/:id", "destination": "/api/marketplace/[id]" },
+    { "source": "/api/webhooks/stripe", "destination": "/api/webhooks/stripe" },
+    { "source": "/api/subscriptions/checkout", "destination": "/api/subscriptions/checkout" },
+    { "source": "/api/subscriptions/portal", "destination": "/api/subscriptions/portal" },
+    { "source": "/api/subscriptions/check", "destination": "/api/subscriptions/check" },
+    { "source": "/api/ai/daily-stylist", "destination": "/api/ai/daily-stylist" },
+    { "source": "/api/ai/smart-outfit", "destination": "/api/ai/smart-outfit" },
+    { "source": "/api/ai/claude-analysis", "destination": "/api/ai/claude-analysis" },
+    { "source": "/api/weather/multiple", "destination": "/api/weather/multiple" },
+    { "source": "/api/services/local", "destination": "/api/services/local" },
+    { "source": "/api/wardrobe/reset", "destination": "/api/wardrobe/reset" },
+    { "source": "/api/wardrobe/populate-sample", "destination": "/api/wardrobe/populate-sample" },
+    { "source": "/api/sustainability/carbon", "destination": "/api/sustainability/carbon" },
+    { "source": "/api/vision/analyze", "destination": "/api/vision/analyze" },
+    { "source": "/api/logs/error", "destination": "/api/logs/error" },
+    { "source": "/api/logs/performance", "destination": "/api/logs/performance" },
+    { "source": "/api/logs/rum", "destination": "/api/logs/rum" },
+    { "source": "/api/logs/security", "destination": "/api/logs/security" },
+    { "source": "/api/sitemap", "destination": "/api/sitemap" }
   ]
 }
