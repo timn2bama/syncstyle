@@ -1,22 +1,26 @@
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useSubscriptionQuery, useSignInMutation, useSignUpMutation } from '../useAuth';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import React from 'react';
 import { vi, describe, it, expect, beforeEach, afterEach, Mock } from 'vitest';
 
-// Mock supabase
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    functions: {
-      invoke: vi.fn(),
+// Mock Better Auth client
+vi.mock('@/lib/auth-client', () => ({
+  authClient: {
+    signIn: {
+      email: vi.fn(),
     },
-    auth: {
-      signInWithPassword: vi.fn(),
-      signUp: vi.fn(),
+    signUp: {
+      email: vi.fn(),
     },
+    signOut: vi.fn(),
+    getSession: vi.fn(),
   },
 }));
+
+// Mock fetch for subscription endpoint
+global.fetch = vi.fn();
 
 const mockToast = vi.fn();
 
@@ -65,12 +69,15 @@ describe('Auth Hooks', () => {
 
       expect(result.current.data).toBeUndefined();
       expect(result.current.status).toBe('pending');
-      expect(supabase.functions.invoke).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it('calls check-subscription function when userId is provided', async () => {
+    it('calls check-subscription endpoint when userId is provided', async () => {
       const mockData = { subscribed: true, subscription_tier: 'Premium' };
-      (supabase.functions.invoke as Mock).mockResolvedValue({ data: mockData, error: null });
+      (global.fetch as Mock).mockResolvedValue({
+        ok: true,
+        json: async () => mockData,
+      });
 
       const { result } = renderHook(() => useSubscriptionQuery('test-user-id'), {
         wrapper: createWrapper(),
@@ -78,13 +85,13 @@ describe('Auth Hooks', () => {
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toEqual(mockData);
-      expect(supabase.functions.invoke).toHaveBeenCalledWith('check-subscription');
+      expect(global.fetch).toHaveBeenCalledWith('/api/analytics/subscription');
     });
 
     it('handles errors gracefully by returning unsubscribed', async () => {
-      (supabase.functions.invoke as Mock).mockResolvedValue({ 
-        data: null, 
-        error: new Error('Network error') 
+      (global.fetch as Mock).mockResolvedValue({
+        ok: false,
+        statusText: 'Network error',
       });
 
       const { result } = renderHook(() => useSubscriptionQuery('test-user-id'), {
@@ -98,7 +105,7 @@ describe('Auth Hooks', () => {
 
   describe('useSignInMutation', () => {
     it('successfully signs in a user', async () => {
-      (supabase.auth.signInWithPassword as Mock).mockResolvedValue({ data: { user: {} }, error: null });
+      (authClient.signIn.email as Mock).mockResolvedValue({ data: { user: {} }, error: null });
 
       const { result } = renderHook(() => useSignInMutation(), {
         wrapper: createWrapper(),
@@ -108,7 +115,7 @@ describe('Auth Hooks', () => {
         await result.current.mutateAsync({ email: 'test@example.com', password: 'password123' });
       });
 
-      expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
+      expect(authClient.signIn.email).toHaveBeenCalledWith({
         email: 'test@example.com',
         password: 'password123',
       });
@@ -118,9 +125,9 @@ describe('Auth Hooks', () => {
     });
 
     it('shows error toast on sign-in failure', async () => {
-      (supabase.auth.signInWithPassword as Mock).mockResolvedValue({ 
-        data: null, 
-        error: { message: 'Invalid credentials' } 
+      (authClient.signIn.email as Mock).mockResolvedValue({
+        data: null,
+        error: { message: 'Invalid credentials' }
       });
 
       const { result } = renderHook(() => useSignInMutation(), {
@@ -144,26 +151,24 @@ describe('Auth Hooks', () => {
 
   describe('useSignUpMutation', () => {
     it('successfully signs up a new user', async () => {
-      (supabase.auth.signUp as Mock).mockResolvedValue({ data: { user: {} }, error: null });
+      (authClient.signUp.email as Mock).mockResolvedValue({ data: { user: {} }, error: null });
 
       const { result } = renderHook(() => useSignUpMutation(), {
         wrapper: createWrapper(),
       });
 
       await act(async () => {
-        await result.current.mutateAsync({ 
-          email: 'new@example.com', 
+        await result.current.mutateAsync({
+          email: 'new@example.com',
           password: 'password123',
           displayName: 'New User'
         });
       });
 
-      expect(supabase.auth.signUp).toHaveBeenCalledWith(expect.objectContaining({
+      expect(authClient.signUp.email).toHaveBeenCalledWith(expect.objectContaining({
         email: 'new@example.com',
         password: 'password123',
-        options: expect.objectContaining({
-          data: { display_name: 'New User' }
-        })
+        name: 'New User',
       }));
       expect(toast).toHaveBeenCalledWith(expect.objectContaining({
         title: 'Account created!',

@@ -1,5 +1,5 @@
 import { toast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { logger } from "@/utils/logger";
 
 /**
@@ -177,7 +177,8 @@ export async function handleError(
   }
 
   // Get current user ID if available
-  const { data: { user } } = await supabase.auth.getUser().catch(() => ({ data: { user: null } }));
+  const { data: sessionData } = await authClient.getSession().catch(() => ({ data: null }));
+  const user = sessionData?.user ?? null;
 
   // Log to monitoring service
   await logToMonitoring({

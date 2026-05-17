@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from "@/utils/logger";
 
@@ -45,7 +46,8 @@ export const useSavedServices = () => {
   // Save a service
   const saveService = async (service: any) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: sessionData } = await authClient.getSession();
+      const user = sessionData?.user;
       if (!user) {
         toast({
           title: "Authentication Required",
@@ -101,7 +103,8 @@ export const useSavedServices = () => {
   // Remove a saved service
   const removeSavedService = async (serviceName: string, serviceAddress: string) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const { data: sessionData } = await authClient.getSession();
+      const user = sessionData?.user;
       if (!user) return false;
 
       const { error } = await supabase

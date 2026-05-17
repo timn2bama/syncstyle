@@ -8,7 +8,7 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useToast } from '@/hooks/use-toast';
 import { validateEmail, getSafeErrorMessage, rateLimiter } from '@/lib/security';
 import { logger } from "@/utils/logger";
@@ -33,12 +33,12 @@ export const useSubscriptionQuery = (userId?: string) => {
     queryFn: async () => {
       if (!userId) return { subscribed: false };
       
-      const { data, error } = await supabase.functions.invoke('check-subscription');
-      if (error) {
-        logger.warn('Subscription check failed:', error);
+      const response = await fetch('/api/analytics/subscription');
+      if (!response.ok) {
+        logger.warn('Subscription check failed:', response.statusText);
         return { subscribed: false }; // Graceful fallback
       }
-      return data;
+      return response.json();
     },
     enabled: !!userId,
     staleTime: 30 * 1000, // 30 seconds
@@ -86,11 +86,11 @@ export const useSignInMutation = () => {
         throw new Error(emailValidation.error || 'Invalid email');
       }
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { error } = await authClient.signIn.email({
         email: email.toLowerCase().trim(),
-        password
+        password,
       });
-      
+
       if (error) {
         throw new Error(getSafeErrorMessage(error));
       } else {
@@ -168,19 +168,12 @@ export const useSignUpMutation = () => {
         throw new Error('Password must be at least 8 characters long');
       }
 
-      const redirectUrl = `${window.location.origin}/`;
-      
-      const { error } = await supabase.auth.signUp({
+      const { error } = await authClient.signUp.email({
         email: email.toLowerCase().trim(),
         password,
-        options: {
-          emailRedirectTo: redirectUrl,
-          data: {
-            display_name: displayName?.trim()
-          }
-        }
+        name: displayName?.trim(),
       });
-      
+
       if (error) {
         throw new Error(getSafeErrorMessage(error));
       }
@@ -227,7 +220,7 @@ export const useSignOutMutation = () => {
   
   return useMutation({
     mutationFn: async () => {
-      const { error } = await supabase.auth.signOut();
+      const { error } = await authClient.signOut();
       if (error) throw error;
     },
     onSuccess: () => {
