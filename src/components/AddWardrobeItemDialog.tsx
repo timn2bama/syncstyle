@@ -19,6 +19,7 @@ import { useCreateWardrobeItem } from "@/hooks/queries/useWardrobeItems";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/utils/logger";
 import DOMPurify from 'dompurify';
+import { compressImage } from "@/utils/imageCompression";
 
 interface AddWardrobeItemDialogProps {
   onItemAdded: () => void;
@@ -46,8 +47,6 @@ const AddWardrobeItemDialog = ({ onItemAdded }: AddWardrobeItemDialogProps) => {
   const categories = [
     "tops", "bottoms", "dresses", "outerwear", "shoes", "accessories"
   ];
-
-  // ... (compressImage function remains the same)
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -147,16 +146,21 @@ const AddWardrobeItemDialog = ({ onItemAdded }: AddWardrobeItemDialogProps) => {
     // Upload photo if file is selected
     if (selectedFile) {
       try {
-        const fileExt = selectedFile.name.split('.').pop();
-        const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-        const { error: uploadError } = await supabase.storage
-          .from('wardrobe-photos')
-          .upload(fileName, selectedFile);
-        if (uploadError) throw uploadError;
-        const { data: { publicUrl } } = supabase.storage
-          .from('wardrobe-photos')
-          .getPublicUrl(fileName);
-        photoUrl = publicUrl;
+        const formData = new FormData();
+        formData.append('file', selectedFile);
+
+        const uploadResponse = await fetch('/api/storage/upload', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }));
+          throw new Error(errorData.error || 'Upload failed');
+        }
+
+        const { url } = await uploadResponse.json();
+        photoUrl = url;
       } catch (error) {
         logger.error('Photo upload failed:', error);
         toast({ title: "Upload Failed", description: "Could not upload photo", variant: "destructive" });

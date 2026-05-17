@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/utils/logger";
 
 interface CurrentWeather {
@@ -43,7 +42,7 @@ export const useWeatherData = () => {
 
   const fetchWeatherData = async () => {
     setWeatherLoading(true);
-    
+
     if (!navigator.geolocation) {
       toast({
         title: "Error",
@@ -57,22 +56,20 @@ export const useWeatherData = () => {
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const { latitude, longitude } = position.coords;
-        
+
         try {
-          const { data, error } = await supabase.functions.invoke('get-weather', {
-            body: { latitude, longitude }
+          const response = await fetch('/api/weather', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ latitude, longitude }),
           });
-          
-          if (error) {
-            logger.error('Weather API error:', error);
-            toast({
-              title: "Weather Error",
-              description: "Failed to fetch weather data.",
-              variant: "destructive",
-            });
-            return;
+
+          if (!response.ok) {
+            throw new Error('Weather API error');
           }
-          
+
+          const data = await response.json();
+
           if (data) {
             setCurrentWeather({
               ...data.current,
@@ -80,7 +77,6 @@ export const useWeatherData = () => {
             });
             setForecast(data.forecast);
           }
-          
         } catch (error) {
           logger.error('Error fetching weather:', error);
           toast({
@@ -89,12 +85,12 @@ export const useWeatherData = () => {
             variant: "destructive",
           });
         }
-        
+
         setWeatherLoading(false);
       },
       (error) => {
         let errorMessage = "Unable to retrieve your location.";
-        
+
         switch (error.code) {
           case error.PERMISSION_DENIED:
             errorMessage = "Location access denied. Please enable location permissions.";
@@ -106,26 +102,26 @@ export const useWeatherData = () => {
             errorMessage = "Location request timed out.";
             break;
         }
-        
+
         toast({
           title: "Location Error",
           description: errorMessage,
           variant: "destructive",
         });
-        
+
         setWeatherLoading(false);
       },
       {
         enableHighAccuracy: true,
         timeout: 10000,
-        maximumAge: 60000
+        maximumAge: 60000,
       }
     );
   };
 
   const fetchAllWeatherData = async () => {
     setWeatherLoading(true);
-    
+
     if (!navigator.geolocation) {
       toast({
         title: "Error",
@@ -140,8 +136,7 @@ export const useWeatherData = () => {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
           const { latitude, longitude } = position.coords;
-          
-          // Define multiple locations to fetch weather for
+
           const locations = [
             { latitude, longitude, name: "Current Location" },
             { latitude: 40.7128, longitude: -74.0060, name: "New York" },
@@ -150,26 +145,21 @@ export const useWeatherData = () => {
             { latitude: 34.0522, longitude: -118.2437, name: "Los Angeles" },
             { latitude: 41.8781, longitude: -87.6298, name: "Chicago" },
           ];
-          
+
           try {
-            const { data, error } = await supabase.functions.invoke('get-weather-multiple', {
-              body: { locations }
+            const response = await fetch('/api/weather', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ locations }),
             });
-            
-            if (error) {
-              logger.error('Weather API error:', error);
-              toast({
-                title: "Weather Error",
-                description: "Failed to fetch weather data.",
-                variant: "destructive",
-              });
-              setWeatherLoading(false);
-              reject(error);
-              return;
+
+            if (!response.ok) {
+              throw new Error('Weather API error');
             }
-            
+
+            const data = await response.json();
+
             if (data && data.locations) {
-              // Set current weather from the first location (current location)
               const currentLocationData = data.locations.find((loc: any) => loc.location === "Current Location");
               if (currentLocationData && !currentLocationData.error) {
                 setCurrentWeather({
@@ -178,11 +168,10 @@ export const useWeatherData = () => {
                 });
                 setForecast(currentLocationData.forecast);
               }
-              
+
               setWeatherLoading(false);
               resolve(data.locations);
             }
-            
           } catch (error) {
             logger.error('Error fetching weather:', error);
             toast({
@@ -196,7 +185,7 @@ export const useWeatherData = () => {
         },
         (error) => {
           let errorMessage = "Unable to retrieve your location.";
-          
+
           switch (error.code) {
             case error.PERMISSION_DENIED:
               errorMessage = "Location access denied. Please enable location permissions.";
@@ -208,20 +197,20 @@ export const useWeatherData = () => {
               errorMessage = "Location request timed out.";
               break;
           }
-          
+
           toast({
             title: "Location Error",
             description: errorMessage,
             variant: "destructive",
           });
-          
+
           setWeatherLoading(false);
           reject(new Error(errorMessage));
         },
         {
           enableHighAccuracy: true,
           timeout: 10000,
-          maximumAge: 60000
+          maximumAge: 60000,
         }
       );
     });

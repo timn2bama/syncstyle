@@ -11,7 +11,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, Eye, Camera, ImagePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ProgressiveImage from "@/components/ProgressiveImage";
-import { supabase } from "@/integrations/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import AddToOutfitDialog from "./AddToOutfitDialog";
@@ -90,40 +90,44 @@ const ViewDetailsDialog = ({ item, children, onItemUpdated }: ViewDetailsDialogP
       // Compress large images before uploading to save bandwidth and storage
       const uploadFile = file.size > 2_000_000 ? await compressImage(file) : file;
 
-      const fileExt = uploadFile.name.split('.').pop();
-      const fileName = `${user.id}/${item.id}/${Date.now()}.${fileExt}`;
+      logger.info('ViewDetailsDialog - Uploading, originalSize:', file.size, 'uploadSize:', uploadFile.size);
 
-      logger.info('ViewDetailsDialog - Uploading to:', fileName, 'originalSize:', file.size, 'uploadSize:', uploadFile.size);
+      const formData = new FormData();
+      formData.append('file', uploadFile);
 
-      const { error: uploadError, data: uploadData } = await supabase.storage
-        .from('wardrobe-photos')
-        .upload(fileName, uploadFile);
+      const uploadResponse = await fetch('/api/storage/upload', {
+        method: 'POST',
+        body: formData,
+      });
 
-      if (uploadError) {
-        logger.error('ViewDetailsDialog - Upload error:', uploadError);
-        throw uploadError;
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }));
+        logger.error('ViewDetailsDialog - Upload error:', errorData);
+        throw new Error(errorData.error || 'Upload failed');
       }
 
-      logger.info('ViewDetailsDialog - Upload successful:', uploadData);
+      const { url: publicUrl } = await uploadResponse.json();
+      logger.info('ViewDetailsDialog - Upload successful, URL:', publicUrl);
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('wardrobe-photos')
-        .getPublicUrl(fileName);
-
-      logger.info('ViewDetailsDialog - Public URL:', publicUrl);
-
-      const { error: updateError, data: updateData } = await supabase
-        .from('wardrobe_items')
-        .update({ photo_url: publicUrl })
-        .eq('id', item.id)
-        .select();
-
-      if (updateError) {
-        logger.error('ViewDetailsDialog - Update error:', updateError);
-        throw updateError;
+      const { data: sessionData } = await authClient.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionData?.session) {
+        headers['Authorization'] = `Bearer ${sessionData.session.token}`;
       }
 
-      logger.info('ViewDetailsDialog - Update successful:', updateData);
+      const updateResponse = await fetch(`/api/wardrobe/${item.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ photo_url: publicUrl }),
+      });
+
+      if (!updateResponse.ok) {
+        const errorData = await updateResponse.json().catch(() => ({ error: 'Update failed' }));
+        logger.error('ViewDetailsDialog - Update error:', errorData);
+        throw new Error(errorData.error || 'Update failed');
+      }
+
+      logger.info('ViewDetailsDialog - Update successful');
 
       toast.success('Photo uploaded successfully!');
       setPreviewImage(null); // Clear preview
@@ -143,15 +147,25 @@ const ViewDetailsDialog = ({ item, children, onItemUpdated }: ViewDetailsDialogP
 
   const markAsWornToday = async () => {
     try {
-      const { error } = await supabase
-        .from('wardrobe_items')
-        .update({ 
-          wear_count: item.wearCount + 1,
-          last_worn: new Date().toISOString()
-        })
-        .eq('id', item.id);
+      const { data: sessionData } = await authClient.getSession();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (sessionData?.session) {
+        headers['Authorization'] = `Bearer ${sessionData.session.token}`;
+      }
 
-      if (error) throw error;
+      const response = await fetch(`/api/wardrobe/${item.id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          wear_count: item.wearCount + 1,
+          last_worn: new Date().toISOString(),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Update failed' }));
+        throw new Error(errorData.error || 'Update failed');
+      }
 
       toast.success(`Marked "${item.name}" as worn today!`);
       onItemUpdated?.(); // Refresh the data
