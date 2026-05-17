@@ -18,7 +18,23 @@ export async function verifyUser(req: VercelRequest) {
   });
 
   if (!session || !session.user) return null;
-  
+
+  return {
+    id: session.user.id,
+    email: session.user.email,
+    name: session.user.name,
+  };
+}
+
+/**
+ * Throws if not authenticated. Returns the session user.
+ * Use in place of verifyUser when you want automatic 401 error throwing.
+ */
+export async function requireAuth(req: VercelRequest): Promise<{ id: string; email: string; name?: string | null }> {
+  const session = await auth.api.getSession({
+    headers: req.headers as any,
+  });
+  if (!session?.user) throw new Error('UNAUTHORIZED');
   return {
     id: session.user.id,
     email: session.user.email,

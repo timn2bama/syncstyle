@@ -1,5 +1,16 @@
 {
   "git": {
     "deploymentEnabled": false
-  }
+  },
+  "functions": {
+    "api/**/*.ts": {
+      "runtime": "@vercel/node@5"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/auth/(.*)", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/wardrobe/:id", "destination": "/api/wardrobe/[id]" },
+    { "source": "/api/outfits/:id", "destination": "/api/outfits/[id]" },
+    { "source": "/api/marketplace/:id", "destination": "/api/marketplace/[id]" }
+  ]
 }
