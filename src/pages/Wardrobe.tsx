@@ -95,8 +95,8 @@ const Wardrobe = () => {
 
   const handleResetWardrobe = async () => {
     try {
-      const { error } = await supabase.functions.invoke('reset-wardrobe');
-      if (error) throw error;
+      const res = await fetch('/api/wardrobe/reset', { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
       toast.success('Wardrobe reset successfully');
       fetchWardrobeItems();
     } catch (error) {
@@ -320,8 +320,8 @@ const Wardrobe = () => {
               variant="outline" 
               onClick={async () => {
                 try {
-                  const { error } = await supabase.functions.invoke('populate-sample-wardrobe');
-                  if (error) throw error;
+                  const res = await fetch('/api/wardrobe/populate-sample', { method: 'POST' });
+                  if (!res.ok) throw new Error(await res.text());
                   toast.success('Sample wardrobe populated successfully!');
                   fetchWardrobeItems();
                 } catch (error) {

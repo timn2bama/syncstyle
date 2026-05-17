@@ -1,6 +1,5 @@
 import { useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { logger } from "@/utils/logger";
 
 interface UserSession {
@@ -63,11 +62,10 @@ export function useRealUserMonitoring() {
     }
 
     try {
-      await supabase.functions.invoke('rum-logger', {
-        body: {
-          action: 'session_start',
-          session
-        }
+      await fetch('/api/logs/rum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'session_start', session })
       });
     } catch (error) {
       logger.error('Failed to initialize RUM session:', error);
@@ -88,12 +86,10 @@ export function useRealUserMonitoring() {
     }
 
     try {
-      await supabase.functions.invoke('rum-logger', {
-        body: {
-          action: 'interaction',
-          session_id: sessionId,
-          interaction: fullInteraction
-        }
+      await fetch('/api/logs/rum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'interaction', session_id: sessionId, interaction: fullInteraction })
       });
     } catch (error) {
       logger.error('Failed to track interaction:', error);
@@ -109,13 +105,10 @@ export function useRealUserMonitoring() {
     }
 
     try {
-      await supabase.functions.invoke('rum-logger', {
-        body: {
-          action: 'page_view',
-          session_id: sessionId,
-          path,
-          timestamp: Date.now()
-        }
+      await fetch('/api/logs/rum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'page_view', session_id: sessionId, path, timestamp: Date.now() })
       });
     } catch (error) {
       logger.error('Failed to track page view:', error);
@@ -131,18 +124,15 @@ export function useRealUserMonitoring() {
     }
 
     try {
-      await supabase.functions.invoke('rum-logger', {
-        body: {
+      await fetch('/api/logs/rum', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           action: 'error',
           session_id: sessionId,
-          error: {
-            message: error.message,
-            stack: error.stack,
-            name: error.name,
-            context
-          },
+          error: { message: error.message, stack: error.stack, name: error.name, context },
           timestamp: Date.now()
-        }
+        })
       });
     } catch (rumError) {
       logger.error('Failed to track error:', rumError);

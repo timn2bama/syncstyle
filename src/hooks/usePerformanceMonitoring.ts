@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { onCLS, onFCP, onLCP, onTTFB, type Metric } from 'web-vitals';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
 
@@ -37,13 +36,14 @@ export function usePerformanceMonitoring() {
     }
 
     try {
-      // Send to analytics service in production
-      await supabase.functions.invoke('performance-logger', {
-        body: {
+      await fetch('/api/logs/performance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           metric: performanceData,
           user_id: user?.id,
           session_id: sessionStorage.getItem('session_id') || 'anonymous'
-        }
+        })
       });
     } catch (error) {
       logger.error('Failed to send performance metric:', error);
@@ -72,12 +72,10 @@ export function usePerformanceMonitoring() {
       return;
     }
 
-    // Send custom metrics to analytics
-    supabase.functions.invoke('performance-logger', {
-      body: {
-        custom_metric: customMetric,
-        user_id: user?.id
-      }
+    fetch('/api/logs/performance', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ custom_metric: customMetric, user_id: user?.id })
     }).catch(error => {
       logger.error('Failed to send custom metric:', error);
     });

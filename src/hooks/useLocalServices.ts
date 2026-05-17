@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
 interface LocalService {
@@ -53,18 +52,15 @@ export const useLocalServices = ({ location }: UseLocalServicesOptions) => {
     setError(null);
 
     try {
-      const { data: responseData, error } = await supabase.functions.invoke('get-local-services', {
-        body: {
-          location: location.trim(),
-          radius: 10000 // 10km radius
-        }
+      const res = await fetch('/api/services/local', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: location.trim(), radius: 10000 })
       });
 
-      if (error) {
-        throw error;
-      }
+      if (!res.ok) throw new Error(await res.text());
 
-      setData(responseData);
+      setData(await res.json());
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch local services';
       setError(errorMessage);

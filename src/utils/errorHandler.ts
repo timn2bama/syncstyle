@@ -99,8 +99,10 @@ async function logToMonitoring(details: ErrorDetails): Promise<void> {
   }
 
   try {
-    await supabase.functions.invoke('error-logger', {
-      body: {
+    await fetch('/api/logs/error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
         context: details.context,
         error: getErrorInfo(details.error),
         userId: details.userId,
@@ -109,7 +111,7 @@ async function logToMonitoring(details: ErrorDetails): Promise<void> {
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
         url: window.location.href,
-      },
+      }),
     });
   } catch (loggingError) {
     // Don't throw if logging fails - just log to console

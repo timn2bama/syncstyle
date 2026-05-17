@@ -4,7 +4,6 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CreditCard, Check, X, RefreshCw } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
@@ -29,9 +28,9 @@ export default function Subscription() {
     
     setCheckingStatus(true);
     try {
-      const { data, error } = await supabase.functions.invoke('check-subscription');
-      if (error) throw error;
-      setSubscriptionStatus(data);
+      const res = await fetch('/api/subscriptions/check');
+      if (!res.ok) throw new Error(await res.text());
+      setSubscriptionStatus(await res.json());
     } catch (error) {
       logger.error('Error checking subscription:', error);
       // Set default state instead of showing repeated error toasts
@@ -46,10 +45,10 @@ export default function Subscription() {
     
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('create-checkout');
-      if (error) throw error;
-      
-      // Open Stripe checkout in a new tab
+      const res = await fetch('/api/subscriptions/checkout', { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+
       window.open(data.url, '_blank');
     } catch (error) {
       logger.error('Error creating checkout:', error);
@@ -68,10 +67,10 @@ export default function Subscription() {
     
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('customer-portal');
-      if (error) throw error;
-      
-      // Open Stripe customer portal in a new tab
+      const res = await fetch('/api/subscriptions/portal', { method: 'POST' });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+
       window.open(data.url, '_blank');
     } catch (error) {
       logger.error('Error opening customer portal:', error);

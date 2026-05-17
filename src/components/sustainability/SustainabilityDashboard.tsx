@@ -93,11 +93,12 @@ const SustainabilityDashboard = () => {
       setCalculating(true);
       
       // Call edge function to calculate carbon footprint
-      const { error } = await supabase.functions.invoke('calculate-carbon-footprint', {
-        body: { user_id: user.id }
+      const res = await fetch('/api/sustainability/carbon', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id })
       });
-
-      if (error) throw error;
+      if (!res.ok) throw new Error(await res.text());
 
       toast({
         title: "Success",

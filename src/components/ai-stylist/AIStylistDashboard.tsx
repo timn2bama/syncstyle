@@ -77,11 +77,12 @@ const AIStylistDashboard = () => {
     try {
       setLoading(true);
       
-      const { error } = await supabase.functions.invoke('ai-daily-stylist', {
-        body: { user_id: user?.id }
+      const res = await fetch('/api/ai/daily-stylist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user?.id })
       });
-
-      if (error) throw error;
+      if (!res.ok) throw new Error(await res.text());
 
       toast({
         title: "Success",

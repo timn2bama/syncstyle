@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from "@/utils/logger";
 
@@ -48,18 +47,20 @@ export const useEnhancedClaude = () => {
         });
       }
 
-      const { data, error } = await supabase.functions.invoke('enhanced-claude-analysis', {
-        body: {
+      const res = await fetch('/api/ai/claude-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           type: request.type,
           data: processedData,
           context: request.context,
           language: request.language || 'en',
-        },
+        }),
       });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error(await res.text());
 
-      return data as AnalysisResponse;
+      return await res.json() as AnalysisResponse;
     } catch (error) {
       logger.error('Enhanced Claude analysis error:', error);
       toast({

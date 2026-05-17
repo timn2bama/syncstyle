@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase } from '@/integrations/supabase/client'; // DB queries only
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
 
@@ -90,12 +90,13 @@ export const useIntegrations = () => {
   // Weather integration
   const getWeatherRecommendations = async (location: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('get-weather', {
-        body: { location }
+      const res = await fetch('/api/weather', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location })
       });
-
-      if (error) throw error;
-      return data;
+      if (!res.ok) throw new Error(await res.text());
+      return await res.json();
     } catch (error) {
       logger.error('Error getting weather recommendations:', error);
       return null;

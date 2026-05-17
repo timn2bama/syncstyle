@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
 
@@ -40,9 +39,10 @@ export const useErrorLogger = () => {
     }
 
     try {
-      // Send to error logging service
-      await supabase.functions.invoke('error-logger', {
-        body: { error: errorEntry }
+      await fetch('/api/logs/error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ error: errorEntry })
       });
     } catch (logError) {
       logger.error('Failed to log error:', logError);

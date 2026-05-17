@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { logger } from "@/utils/logger";
 
 type AuditEventType = 
@@ -39,15 +38,14 @@ export function useAuditLog() {
 
       // In production, you could send to a dedicated logging service
       // or store in a database table
-      await supabase.functions.invoke('security-logger', {
-        body: {
+      await fetch('/api/logs/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           event_type: 'audit_log',
           user_id: user?.id,
-          details: {
-            audit_event: entry.event_type,
-            ...entry.details
-          }
-        }
+          details: { audit_event: entry.event_type, ...entry.details }
+        })
       });
     } catch (error) {
       logger.error('Failed to log audit event:', error);
@@ -56,12 +54,10 @@ export function useAuditLog() {
 
   const logSecurityEvent = useCallback(async (eventType: string, details: Record<string, any>) => {
     try {
-      await supabase.functions.invoke('security-logger', {
-        body: {
-          event_type: eventType,
-          user_id: user?.id,
-          details
-        }
+      await fetch('/api/logs/security', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event_type: eventType, user_id: user?.id, details })
       });
     } catch (error) {
       logger.error('Failed to log security event:', error);

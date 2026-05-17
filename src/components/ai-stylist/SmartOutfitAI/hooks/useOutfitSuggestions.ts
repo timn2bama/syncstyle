@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { logger } from "@/utils/logger";
@@ -50,17 +49,19 @@ export const useOutfitSuggestions = (onOutfitCreated?: () => void) => {
     setLoading(true);
     
     try {
-      const { data, error } = await supabase.functions.invoke('smart-outfit-ai', {
-        body: {
-          location: location.trim(),
-          preferences: preferences.trim()
-        }
+      const res = await fetch('/api/ai/smart-outfit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ location: location.trim(), preferences: preferences.trim() })
       });
 
-      if (error) {
-        logger.error('Supabase function error:', error);
-        throw error;
+      if (!res.ok) {
+        const errText = await res.text();
+        logger.error('Smart outfit API error:', errText);
+        throw new Error(errText);
       }
+
+      const data = await res.json();
 
       if (data.error) {
         if (data.error.includes('quota limits') || data.error.includes('temporarily unavailable')) {

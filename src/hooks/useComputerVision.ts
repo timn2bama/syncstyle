@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from "@/utils/logger";
 
@@ -57,8 +56,10 @@ export const useComputerVision = () => {
         reader.readAsDataURL(image);
       });
 
-      const { data, error } = await supabase.functions.invoke('computer-vision-analysis', {
-        body: {
+      const res = await fetch('/api/vision/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           image: base64Image,
           options: {
             includeColors: options.includeColors ?? true,
@@ -67,12 +68,12 @@ export const useComputerVision = () => {
             includeFit: options.includeFit ?? true,
             includeStyle: options.includeStyle ?? true,
           },
-        },
+        }),
       });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error(await res.text());
 
-      const analysis = data as ClothingAnalysis;
+      const analysis = await res.json() as ClothingAnalysis;
       setAnalysisResults(analysis);
 
       toast({
