@@ -48,13 +48,17 @@ export const useCreateWardrobeItem = () => {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: (item: Partial<WardrobeItem>) => api.post('/wardrobe', item),
+    mutationFn: (item: Omit<WardrobeItem, 'id' | 'created_at' | 'updated_at'>) =>
+      api.post('/wardrobe', item),
     onSuccess: () => {
       invalidateWardrobeQueries(queryClient);
       toast({
         title: "Success",
         description: "Wardrobe item added successfully.",
       });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to add item", description: error.message, variant: "destructive" });
     },
   });
 };

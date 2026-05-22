@@ -1,11 +1,22 @@
 import axios from 'axios';
 import { toast } from 'sonner';
+import { authClient } from '@/lib/auth-client';
 
 const api = axios.create({
   baseURL: '/api',
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Attach Better Auth session token to every request
+api.interceptors.request.use(async (config) => {
+  const { data } = await authClient.getSession();
+  const token = data?.session?.token;
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
 });
 
 // Error handling interceptor
