@@ -132,6 +132,9 @@ model Outfit {
 
   items     OutfitItem[]
   wear_logs OutfitWearLog[]
+  likes     OutfitLike[]
+  ratings   OutfitRating[]
+  comments  OutfitComment[]
 
   @@map("outfits")
 }
@@ -365,4 +368,91 @@ model UserStylePreference {
   users           User[]
 
   @@map("user_style_preferences")
+}
+
+model OutfitLike {
+  id         String   @id @default(uuid())
+  user_id    String
+  outfit_id  String
+  created_at DateTime @default(now())
+
+  outfit Outfit @relation(fields: [outfit_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, outfit_id])
+  @@map("outfit_likes")
+}
+
+model OutfitRating {
+  id         String   @id @default(uuid())
+  user_id    String
+  outfit_id  String
+  rating     Int
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  outfit Outfit @relation(fields: [outfit_id], references: [id], onDelete: Cascade)
+
+  @@unique([user_id, outfit_id])
+  @@map("outfit_ratings")
+}
+
+model OutfitComment {
+  id         String   @id @default(uuid())
+  user_id    String
+  outfit_id  String
+  content    String
+  created_at DateTime @default(now())
+
+  outfit Outfit @relation(fields: [outfit_id], references: [id], onDelete: Cascade)
+
+  @@map("outfit_comments")
+}
+
+model EventOutfitRequest {
+  id                   String    @id @default(uuid())
+  user_id              String
+  event_title          String
+  event_type           String?
+  event_date           DateTime?
+  dress_code           String?
+  location             String?
+  selected_outfit_id   String?
+  special_requirements String?
+  weather_requirements String?
+  suggested_outfits    Json?
+  status               String    @default("pending")
+  created_at           DateTime  @default(now())
+  updated_at           DateTime  @updatedAt
+
+  @@map("event_outfit_requests")
+}
+
+model StyleEvolutionTracking {
+  id               String   @id @default(uuid())
+  user_id          String
+  tracking_date    DateTime @default(now())
+  style_metrics    Json?
+  achievements     String[]
+  confidence_level Int?
+  mood_tags        String[]
+  style_goals      String[]
+  insights         Json?
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@map("style_evolution_tracking")
+}
+
+model SustainabilityMetric {
+  id          String   @id @default(uuid())
+  userId      String
+  metricType  String
+  value       Float
+  unit        String
+  periodStart DateTime
+  periodEnd   DateTime
+  sourceData  Json?
+  createdAt   DateTime @default(now())
+
+  @@map("sustainability_metrics")
 }

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
 import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
+import api from '@/lib/api';
 import { Sparkles, Calendar, TrendingUp, ShoppingBag, Heart, Star } from 'lucide-react';
 import DailyOutfitSuggestion from './DailyOutfitSuggestion';
 import { logger } from "@/utils/logger";
@@ -48,22 +49,11 @@ const AIStylistDashboard = () => {
       const suggestionsData = await suggestionsRes.json();
       setOutfitSuggestions((suggestionsData as DailyOutfitSuggestionType[]) || []);
 
-      // TODO: implement when Prisma model added
-      // const { data: eventsData, error: eventsError } = await supabase
-      //   .from('event_outfit_requests')
-      //   .select('*')
-      //   .eq('user_id', user.id)
-      //   .order('event_date', { ascending: false });
-      setEventRequests([]);
+      const eventsData = await api.get('/events') as EventOutfitRequest[];
+      setEventRequests(eventsData || []);
 
-      // TODO: implement when Prisma model added
-      // const { data: evolutionData, error: evolutionError } = await supabase
-      //   .from('style_evolution_tracking')
-      //   .select('*')
-      //   .eq('user_id', user.id)
-      //   .order('tracking_date', { ascending: false })
-      //   .limit(30);
-      setStyleEvolution([]);
+      const evolutionData = await api.get('/style-evolution') as StyleEvolution[];
+      setStyleEvolution(evolutionData || []);
 
     } catch (error) {
       logger.error('Error fetching stylist data:', error);
