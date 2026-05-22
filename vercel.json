@@ -1,9 +1,4 @@
 {
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node@3"
-    }
-  },
   "rewrites": [
     { "source": "/api/auth/(.*)", "destination": "/api/auth/[...auth]" },
     { "source": "/api/wardrobe/:id/items", "destination": "/api/outfits/[id]/items" },
