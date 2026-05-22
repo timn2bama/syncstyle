@@ -18,7 +18,8 @@ interface Outfit {
   occasion: string | null;
   season: string | null;
   created_at: string;
-  outfit_items: { wardrobe_item_id: string }[];
+  // API returns 'items' (Prisma relation name); alias as items for legacy compat
+  items: { wardrobe_item_id: string }[];
 }
 
 interface ClothingItem {
@@ -93,7 +94,7 @@ const AddToOutfitDialog = ({ item, children }: AddToOutfitDialogProps) => {
 
       // Check if item is already in outfit (client-side using already-fetched data)
       const outfit = outfits.find(o => o.id === outfitId);
-      const alreadyIn = outfit?.outfit_items.some(oi => oi.wardrobe_item_id === item.id);
+      const alreadyIn = outfit?.items.some(oi => oi.wardrobe_item_id === item.id);
       if (alreadyIn) {
         toast.info('Item is already in this outfit');
         return;
@@ -118,7 +119,7 @@ const AddToOutfitDialog = ({ item, children }: AddToOutfitDialogProps) => {
   };
 
   const isItemInOutfit = (outfit: Outfit) => {
-    return outfit.outfit_items.some(oi => oi.wardrobe_item_id === item.id);
+    return outfit.items.some(oi => oi.wardrobe_item_id === item.id);
   };
 
   return (
@@ -195,7 +196,7 @@ const AddToOutfitDialog = ({ item, children }: AddToOutfitDialogProps) => {
                            )}
                          </div>
                          <p className="text-xs text-muted-foreground mt-2">
-                           {outfit.outfit_items.length} item{outfit.outfit_items.length !== 1 ? 's' : ''}
+                           {outfit.items.length} item{outfit.items.length !== 1 ? 's' : ''}
                          </p>
                        </div>
                        

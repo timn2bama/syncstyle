@@ -1,57 +1,40 @@
 import { renderHook, act } from '@testing-library/react';
 import { useOutfitRecommendations } from '../useOutfitRecommendations';
-import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 
-// Mock supabase
-const mockSupabaseChain: any = {
-  select: vi.fn().mockReturnThis(),
-  insert: vi.fn().mockReturnThis(),
-  single: vi.fn().mockReturnThis(),
-  eq: vi.fn().mockReturnThis(),
-  order: vi.fn().mockReturnThis(),
-};
-
-vi.mock('@/integrations/supabase/client', () => ({
-  supabase: {
-    from: vi.fn(() => mockSupabaseChain),
-  },
-}));
-
-// Mock useAuth
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: vi.fn(),
 }));
 
-// Mock logger
 vi.mock('@/utils/logger', () => ({
-  logger: {
-    error: vi.fn(),
+  logger: { error: vi.fn() },
+}));
+
+vi.mock('@/hooks/use-toast', () => ({
+  useToast: vi.fn(() => ({ toast: vi.fn() })),
+}));
+
+vi.mock('@/lib/auth-client', () => ({
+  authClient: {
+    getSession: vi.fn().mockResolvedValue({ data: { session: { token: 'test-token' } } }),
   },
 }));
 
-const mockToast = vi.fn();
-vi.mock('@/hooks/use-toast', () => ({
-  useToast: vi.fn(() => ({
-    toast: mockToast,
-  })),
-}));
+const mockFetch = vi.fn();
+global.fetch = mockFetch;
 
 describe('useOutfitRecommendations', () => {
   const mockUser = { id: 'test-user-id' };
-  
+
   beforeEach(() => {
     vi.restoreAllMocks();
     (useAuth as any).mockReturnValue({ user: mockUser });
-    
-    // Reset implementations to default chaining behavior
-    mockSupabaseChain.select.mockReturnThis();
-    mockSupabaseChain.insert.mockReturnThis();
-    mockSupabaseChain.single.mockReturnThis();
-    mockSupabaseChain.eq.mockReturnThis();
-    mockSupabaseChain.order.mockReturnThis();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue([]),
+    });
   });
 
   it('generates suggestions based on wardrobe items', async () => {
@@ -60,7 +43,10 @@ describe('useOutfitRecommendations', () => {
       { id: '2', name: 'Jeans', category: 'bottoms', color: 'Blue', photo_url: null },
       { id: '3', name: 'Sneakers', category: 'shoes', color: 'Black', photo_url: null },
     ];
-    (mockSupabaseChain.select as any).mockResolvedValue({ data: mockWardrobeItems, error: null });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockWardrobeItems),
+    });
 
     const { result } = renderHook(() => useOutfitRecommendations());
 
@@ -70,7 +56,7 @@ describe('useOutfitRecommendations', () => {
 
     expect(result.current.suggestions.length).toBeGreaterThan(0);
     expect(result.current.suggestions[0].items.length).toBeGreaterThanOrEqual(2);
-    expect(supabase.from).toHaveBeenCalledWith('wardrobe_items');
+    expect(mockFetch).toHaveBeenCalledWith('/api/wardrobe', expect.any(Object));
   });
 
   it('includes base item in suggestions if provided', async () => {
@@ -80,7 +66,10 @@ describe('useOutfitRecommendations', () => {
       { id: '2', name: 'Jeans', category: 'bottoms', color: 'Blue', photo_url: null },
       { id: '3', name: 'Sneakers', category: 'shoes', color: 'Black', photo_url: null },
     ];
-    (mockSupabaseChain.select as any).mockResolvedValue({ data: mockWardrobeItems, error: null });
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue(mockWardrobeItems),
+    });
 
     const { result } = renderHook(() => useOutfitRecommendations());
 
@@ -88,9 +77,8 @@ describe('useOutfitRecommendations', () => {
       await result.current.generateSuggestions(baseItem);
     });
 
-    // Check if at least one suggestion contains the base item
-    const hasBaseItem = result.current.suggestions.some(s => 
-      s.items.some(item => item.id === baseItem.id)
+    const hasBaseItem = result.current.suggestions.some(s =>
+      s.items.some((item: any) => item.id === baseItem.id)
     );
     expect(hasBaseItem).toBe(true);
   });
@@ -102,23 +90,12 @@ describe('useOutfitRecommendations', () => {
       occasion: 'casual',
       season: 'all seasons',
       matchScore: 100,
-      description: 'Test Outfit'
+      description: 'Test Outfit',
     };
-    
-    // First call: .from('outfits').insert(...).select().single()
-    // Second call: .from('outfit_items').insert(...)
-    
-    (mockSupabaseChain.single as any).mockResolvedValue({ 
-      data: { id: 'outfit-123' }, 
-      error: null 
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: vi.fn().mockResolvedValue({ id: 'outfit-123' }),
     });
-    
-    // We need insert to return the chain for the first call, 
-    // and resolve to { error: null } for the second call if it's awaited.
-    // However, the code awaits the result of the whole chain.
-    (mockSupabaseChain.insert as any)
-      .mockReturnValueOnce(mockSupabaseChain) // First call returns chain
-      .mockResolvedValueOnce({ error: null }); // Second call resolves
 
     const { result } = renderHook(() => useOutfitRecommendations());
 
@@ -126,16 +103,11 @@ describe('useOutfitRecommendations', () => {
       await result.current.createOutfitFromSuggestion(mockSuggestion as any, 'My New Outfit');
     });
 
-    expect(supabase.from).toHaveBeenCalledWith('outfits');
-    expect(supabase.from).toHaveBeenCalledWith('outfit_items');
-    expect(mockToast).not.toHaveBeenCalled(); // Hook doesn't call toast, it just returns
+    expect(mockFetch).toHaveBeenCalledWith('/api/outfits', expect.objectContaining({ method: 'POST' }));
   });
 
   it('handles errors during suggestion generation', async () => {
-    (mockSupabaseChain.select as any).mockResolvedValue({ 
-      data: null, 
-      error: new Error('Database error') 
-    });
+    mockFetch.mockResolvedValue({ ok: false, text: vi.fn().mockResolvedValue('Database error') });
 
     const { result } = renderHook(() => useOutfitRecommendations());
 

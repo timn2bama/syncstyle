@@ -14,10 +14,25 @@ import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Shirt, Plus, Trash2 } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tables } from "@/integrations/supabase/types";
 import { logger } from "@/utils/logger";
 
-interface WardrobeItem extends Tables<'wardrobe_items'> {
+interface WardrobeItem {
+  id: string;
+  user_id: string;
+  name: string;
+  category: string;
+  brand: string | null;
+  color: string | null;
+  photo_url: string | null;
+  description: string | null;
+  wear_count: number | null;
+  last_worn: string | null;
+  purchase_date: string | null;
+  dominant_color: string | null;
+  color_palette: unknown | null;
+  detected_labels: unknown | null;
+  created_at: string;
+  updated_at: string;
   wearCount: number;
   lastWorn: string;
 }
