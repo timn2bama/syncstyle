@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -31,6 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    const user = await requireAuth(req);
+
     const { error }: { error: ErrorLogEntry } = req.body || {};
 
     // Log error with severity-based formatting
@@ -42,7 +45,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       severity: error.severity,
       message: error.message,
       url: error.url,
-      userId: error.userId || 'anonymous',
+      userId: error.userId || user.id,
       userAgent: error.userAgent,
       stack: error.stack,
       context: error.context,
@@ -79,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ success: true, logged: true });
   } catch (err: any) {
+    if (err.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error in error-logger function:', err);
     return res.status(500).json({ error: 'Failed to log error' });
   }

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { authClient } from '@/lib/auth-client';
+import api from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from "@/utils/logger";
 
@@ -19,15 +19,12 @@ export const useSavedServices = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  // TODO: implement saved services API endpoint (GET/POST/DELETE /api/services/saved)
-  // when the route exists, replace these stubs with actual fetch calls
-
   // Fetch saved services for the current user
   const fetchSavedServices = async () => {
-    // TODO: replace with GET /api/services/saved once endpoint is created
     setLoading(true);
     try {
-      setSavedServices([]);
+      const data = await api.get('/services/saved');
+      setSavedServices(data as SavedService[]);
     } catch (error: any) {
       logger.error('Error fetching saved services:', error);
       toast({
@@ -42,17 +39,13 @@ export const useSavedServices = () => {
 
   // Save a service
   const saveService = async (service: any) => {
-    // TODO: replace with POST /api/services/saved once endpoint is created
     try {
-      const { data: sessionData } = await authClient.getSession();
-      if (!sessionData?.session) {
-        toast({
-          title: "Authentication Required",
-          description: "Please sign in to save services",
-          variant: "destructive",
-        });
-        return false;
-      }
+      await api.post('/services/saved', {
+        service_name: service.name,
+        service_address: service.vicinity || service.formatted_address || '',
+        service_phone: service.formatted_phone_number || null,
+        service_data: service,
+      });
 
       toast({
         title: "Service Saved",
@@ -74,10 +67,13 @@ export const useSavedServices = () => {
 
   // Remove a saved service
   const removeSavedService = async (serviceName: string, serviceAddress: string) => {
-    // TODO: replace with DELETE /api/services/saved once endpoint is created
     try {
-      const { data: sessionData } = await authClient.getSession();
-      if (!sessionData?.session) return false;
+      const match = savedServices.find(
+        s => s.service_name === serviceName && s.service_address === (serviceAddress || '')
+      );
+      if (!match) return false;
+
+      await api.delete('/services/saved?id=' + match.id);
 
       toast({
         title: "Service Removed",

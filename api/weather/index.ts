@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -36,6 +37,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await requireAuth(req);
+
     // Rate limiting check
     const clientIP =
       (req.headers['x-forwarded-for'] as string) ||
@@ -121,6 +124,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json(result);
   } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error in get-weather function:', error);
     let errorMessage = 'Unable to fetch weather data at this time';
     if (error.message && error.message.includes('API')) {

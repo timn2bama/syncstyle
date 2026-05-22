@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -37,7 +38,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { metric, custom_metric, user_id, session_id } = req.body || {};
+    const user = await requireAuth(req);
+
+    const { metric, custom_metric, user_id = user.id, session_id } = req.body || {};
 
     // Log performance data
     if (metric) {
@@ -75,6 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ success: true });
   } catch (err: any) {
+    if (err.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error in performance-logger:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }

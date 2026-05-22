@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -41,6 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await requireAuth(req);
+
     const { action, session, session_id, interaction, path, error, timestamp } = req.body || {};
 
     switch (action) {
@@ -77,6 +80,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ success: true });
   } catch (err: any) {
+    if (err.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error in rum-logger:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }

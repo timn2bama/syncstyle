@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -18,6 +19,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await requireAuth(req);
+
     const openaiApiKey = process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
       throw new Error('OPENAI_API_KEY is not set');
@@ -143,6 +146,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json(analysis);
   } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error in computer-vision-analysis:', error);
     return res.status(500).json({
       error: error.message,

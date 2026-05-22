@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -49,6 +50,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await requireAuth(req);
+
     const clientIP = (req.headers['x-forwarded-for'] as string) || 'unknown';
 
     const { event_type, user_id, details }: SecurityEvent = req.body || {};
@@ -78,6 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     return res.status(200).json({ success: true, logged: true });
   } catch (err: any) {
+    if (err.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error in security-logger function:', err);
     return res.status(500).json({ error: 'Internal server error' });
   }

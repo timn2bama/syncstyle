@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { requireAuth } from '../lib/auth';
 
 const allowedOrigins = [
   'http://localhost:5173',
@@ -72,6 +73,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    await requireAuth(req);
+
     // Rate limiting
     const clientIP =
       (req.headers['x-forwarded-for'] as string) ||
@@ -233,6 +236,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       },
     });
   } catch (error: any) {
+    if (error.message === 'UNAUTHORIZED') return res.status(401).json({ error: 'Unauthorized' });
     console.error('Error fetching local services:', error);
     return res.status(500).json({ error: 'Failed to fetch local services' });
   }
