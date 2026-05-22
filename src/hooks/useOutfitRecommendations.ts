@@ -2,7 +2,7 @@
 // Licensed under the Apache License, Version 2.0.
 // See the LICENSE file in the project root for license information.
 import { useState, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/utils/logger";
 
@@ -126,11 +126,15 @@ export const useOutfitRecommendations = () => {
 
     setLoading(true);
     try {
-      const { data: wardrobeItems, error } = await supabase
-        .from('wardrobe_items')
-        .select('*');
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = token
+        ? { 'Authorization': `Bearer ${token}` }
+        : {};
 
-      if (error) throw error;
+      const res = await fetch('/api/wardrobe', { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const wardrobeItems = await res.json();
 
       // Simple outfit recommendation algorithm
       const outfitSuggestions = generateOutfitCombinations(wardrobeItems, baseItem);
@@ -146,34 +150,27 @@ export const useOutfitRecommendations = () => {
     if (!user) return;
 
     try {
-      // Create the outfit
-      const { data: outfit, error: outfitError } = await supabase
-        .from('outfits')
-        .insert({
-          user_id: user.id,
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
+
+      const res = await fetch('/api/outfits', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
           name,
           description: suggestion.description,
           occasion: suggestion.occasion,
-          season: suggestion.season
-        })
-        .select()
-        .single();
+          season: suggestion.season,
+          items: suggestion.items.map(item => item.id),
+        }),
+      });
 
-      if (outfitError) throw outfitError;
-
-      // Add items to the outfit
-      const outfitItems = suggestion.items.map(item => ({
-        outfit_id: outfit.id,
-        wardrobe_item_id: item.id
-      }));
-
-      const { error: itemsError } = await supabase
-        .from('outfit_items')
-        .insert(outfitItems);
-
-      if (itemsError) throw itemsError;
-
-      return outfit;
+      if (!res.ok) throw new Error(await res.text());
+      return res.json();
     } catch (error) {
       logger.error('Error creating outfit from suggestion:', error);
       throw error;

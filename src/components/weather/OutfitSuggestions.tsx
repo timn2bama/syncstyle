@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus, Sparkles, Image } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { logger } from "@/utils/logger";
@@ -57,12 +57,15 @@ export const OutfitSuggestions = ({ weatherSuggestions }: OutfitSuggestionsProps
   const fetchWardrobeItems = async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase
-        .from('wardrobe_items')
-        .select('id, name, category, color, photo_url')
-        .eq('user_id', user.id);
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = token
+        ? { 'Authorization': `Bearer ${token}` }
+        : {};
 
-      if (error) throw error;
+      const res = await fetch('/api/wardrobe', { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
       setWardrobeItems(data || []);
     } catch (error) {
       logger.error('Error fetching wardrobe items:', error);
@@ -116,35 +119,28 @@ export const OutfitSuggestions = ({ weatherSuggestions }: OutfitSuggestionsProps
 
     setIsCreating(true);
     try {
-      const { data: outfitData, error: outfitError } = await supabase
-        .from('outfits')
-        .insert({
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
+
+      const items = selectedSuggestion.wardrobeItems?.map(item => item.id) || [];
+
+      const res = await fetch('/api/outfits', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
           name: outfitName,
           description: outfitDescription || `Weather-suggested outfit for ${selectedSuggestion.weather}`,
           occasion: 'weather-suggested',
           season: getSeasonFromTemp(selectedSuggestion.weather),
-          user_id: user.id
-        })
-        .select()
-        .single();
+          items,
+        }),
+      });
 
-      if (outfitError) throw outfitError;
-
-      // Add wardrobe items to the outfit if any were matched
-      if (selectedSuggestion.wardrobeItems && selectedSuggestion.wardrobeItems.length > 0) {
-        const outfitItems = selectedSuggestion.wardrobeItems.map(item => ({
-          outfit_id: outfitData.id,
-          wardrobe_item_id: item.id
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('outfit_items')
-          .insert(outfitItems);
-
-        if (itemsError) {
-          logger.error('Error adding items to outfit:', itemsError);
-        }
-      }
+      if (!res.ok) throw new Error(await res.text());
 
       toast.success(`Outfit "${outfitName}" created successfully!`);
       setDialogOpen(false);

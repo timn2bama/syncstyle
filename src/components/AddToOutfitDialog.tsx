@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Search, Plus, Check } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { logger } from "@/utils/logger";
@@ -61,20 +61,15 @@ const AddToOutfitDialog = ({ item, children }: AddToOutfitDialogProps) => {
 
   const fetchOutfits = async () => {
     try {
-      const { data, error } = await supabase
-        .from('outfits')
-        .select(`
-          id,
-          name,
-          description,
-          occasion,
-          season,
-          created_at,
-          outfit_items!inner(wardrobe_item_id)
-        `)
-        .order('created_at', { ascending: false });
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = token
+        ? { 'Authorization': `Bearer ${token}` }
+        : {};
 
-      if (error) throw error;
+      const res = await fetch('/api/outfits', { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
       setOutfits(data || []);
     } catch (error) {
       logger.error('Error fetching outfits:', error);
@@ -89,29 +84,29 @@ const AddToOutfitDialog = ({ item, children }: AddToOutfitDialogProps) => {
 
     setAddingToOutfit(outfitId);
     try {
-      // Check if item is already in outfit
-      const { data: existing } = await supabase
-        .from('outfit_items')
-        .select('id')
-        .eq('outfit_id', outfitId)
-        .eq('wardrobe_item_id', item.id)
-        .single();
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
 
-      if (existing) {
+      // Check if item is already in outfit (client-side using already-fetched data)
+      const outfit = outfits.find(o => o.id === outfitId);
+      const alreadyIn = outfit?.outfit_items.some(oi => oi.wardrobe_item_id === item.id);
+      if (alreadyIn) {
         toast.info('Item is already in this outfit');
         return;
       }
 
-      const { error } = await supabase
-        .from('outfit_items')
-        .insert({
-          outfit_id: outfitId,
-          wardrobe_item_id: item.id
-        });
+      const res = await fetch(`/api/outfits/${outfitId}/items`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ wardrobe_item_id: item.id }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error(await res.text());
 
-      const outfit = outfits.find(o => o.id === outfitId);
       toast.success(`Added "${item.name}" to "${outfit?.name}"`);
       setOpen(false);
     } catch (error) {

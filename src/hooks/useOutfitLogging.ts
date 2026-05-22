@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { sanitizeInput } from '@/lib/security';
@@ -30,6 +30,15 @@ export function useOutfitLogging() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
 
+  const getAuthHeaders = useCallback(async (json = false): Promise<Record<string, string>> => {
+    const { data: sessionData } = await authClient.getSession();
+    const token = sessionData?.session?.token;
+    const headers: Record<string, string> = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (json) headers['Content-Type'] = 'application/json';
+    return headers;
+  }, []);
+
   const logOutfitWorn = useCallback(async (outfitId: string, logData: Partial<OutfitWearLog>) => {
     if (!user) {
       toast.error('Please sign in to log outfits');
@@ -47,12 +56,13 @@ export function useOutfitLogging() {
         weather_condition: logData.weather_condition ? sanitizeInput(logData.weather_condition) : undefined,
       };
 
-      // 1. Insert wear log
-      // Use any to bypass strict type checking for non-existent table in types.ts
-      const { data: wearLog, error: logError } = await (supabase
-        .from('outfit_wear_history' as any) as any)
-        .insert({
-          user_id: user.id,
+      const headers = await getAuthHeaders(true);
+
+      // 1. Insert wear log via API
+      const logRes = await fetch('/api/outfit-wear-log', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
           outfit_id: outfitId,
           worn_date: sanitizedData.worn_date || new Date().toISOString(),
           location: sanitizedData.location,
@@ -62,51 +72,29 @@ export function useOutfitLogging() {
           mood_tags: sanitizedData.mood_tags,
           comfort_rating: sanitizedData.comfort_rating,
           style_satisfaction: sanitizedData.style_satisfaction,
-          notes: sanitizedData.notes
-        })
-        .select()
-        .single();
+          notes: sanitizedData.notes,
+        }),
+      });
 
-      if (logError) throw logError;
+      if (!logRes.ok) throw new Error(await logRes.text());
+      const wearLog = await logRes.json();
 
-      // 2. Log individual item wears
+      // 2. Update wear counts on individual items
       if (logData.items_worn && logData.items_worn.length > 0) {
-        const itemLogs = logData.items_worn.map(item => ({
-          user_id: user.id,
-          wardrobe_item_id: item.item_id,
-          wear_history_id: wearLog.id,
-          worn_date: sanitizedData.worn_date || new Date().toISOString()
-        }));
-
-        const { error: itemsError } = await (supabase
-          .from('wardrobe_item_wear_history' as any) as any)
-          .insert(itemLogs);
-
-        if (itemsError) throw itemsError;
-
-        // 3. Update wear counts on items
         for (const item of logData.items_worn) {
-          const { data: currentItem } = await supabase
-            .from('wardrobe_items')
-            .select('wear_count')
-            .eq('id', item.item_id)
-            .single();
-            
-          await supabase
-            .from('wardrobe_items')
-            .update({ 
-              wear_count: ((currentItem as any)?.wear_count || 0) + 1,
-              last_worn: (sanitizedData.worn_date || new Date().toISOString()) as string
-            })
-            .eq('id', item.item_id);
+          const itemRes = await fetch(`/api/wardrobe/${item.item_id}`, {
+            method: 'PUT',
+            headers,
+            body: JSON.stringify({
+              wear_count_increment: 1,
+              last_worn: (sanitizedData.worn_date || new Date().toISOString()) as string,
+            }),
+          });
+          if (!itemRes.ok) {
+            logger.error('Error updating wear count for item:', item.item_id);
+          }
         }
       }
-
-      // 4. Update last worn on outfit
-      await (supabase
-        .from('outfits')
-        .update({ last_worn_at: sanitizedData.worn_date || new Date().toISOString() } as any)
-        .eq('id', outfitId));
 
       toast.success('Outfit wear history logged successfully!');
       return true;
@@ -117,20 +105,20 @@ export function useOutfitLogging() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, getAuthHeaders]);
 
   const deleteWearHistory = useCallback(async (historyId: string) => {
     if (!user) return false;
-    
+
     setLoading(true);
     try {
-      const { error } = await (supabase
-        .from('outfit_wear_history' as any) as any)
-        .delete()
-        .eq('id', historyId)
-        .eq('user_id', user.id);
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/outfit-wear-log/${historyId}`, {
+        method: 'DELETE',
+        headers,
+      });
 
-      if (error) throw error;
+      if (!res.ok) throw new Error(await res.text());
       toast.success('History entry deleted');
       return true;
     } catch (error: any) {
@@ -139,32 +127,24 @@ export function useOutfitLogging() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, getAuthHeaders]);
 
   const getWearHistory = useCallback(async (days = 90) => {
     if (!user) return [];
-    
+
     setLoading(true);
     try {
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() - days);
-
-      const { data, error } = await (supabase
-        .from('outfit_wear_history' as any) as any)
-        .select('*')
-        .eq('user_id', user.id)
-        .gte('worn_date', startDate.toISOString())
-        .order('worn_date', { ascending: false });
-
-      if (error) throw error;
-      return data || [];
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/outfit-wear-log?days=${days}`, { headers });
+      if (!res.ok) throw new Error(await res.text());
+      return await res.json() || [];
     } catch (error) {
       logger.error('Error fetching wear history:', error);
       return [];
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, getAuthHeaders]);
 
   return { logOutfitWorn, deleteWearHistory, deleteLog: deleteWearHistory, getWearHistory, loading };
 }

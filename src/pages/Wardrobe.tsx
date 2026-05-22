@@ -9,7 +9,7 @@ import ViewDetailsDialog from "@/components/ViewDetailsDialog";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import EmptyState from "@/components/EmptyState";
 import ProgressiveImage from "@/components/ProgressiveImage";
-import { supabase } from "@/integrations/supabase/client";
+import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Shirt, Plus, Trash2 } from "lucide-react";
@@ -36,15 +36,18 @@ const Wardrobe = () => {
 
   const fetchWardrobeItems = async () => {
     try {
-      const { data, error } = await supabase
-        .from('wardrobe_items')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = token
+        ? { 'Authorization': `Bearer ${token}` }
+        : {};
 
-      if (error) throw error;
+      const res = await fetch('/api/wardrobe', { headers });
+      if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
 
       // Transform data to match expected format
-      const transformedItems: WardrobeItem[] = (data || []).map(item => ({
+      const transformedItems: WardrobeItem[] = (data || []).map((item: any) => ({
         ...item,
         wearCount: item.wear_count || 0,
         lastWorn: item.last_worn ? formatDate(item.last_worn) : 'Never'
@@ -75,15 +78,23 @@ const Wardrobe = () => {
   const markAsWorn = async (itemId: string, itemName: string) => {
     try {
       const currentItem = clothingItems.find(item => item.id === itemId);
-      const { error } = await supabase
-        .from('wardrobe_items')
-        .update({ 
-          wear_count: (currentItem?.wearCount || 0) + 1,
-          last_worn: new Date().toISOString()
-        })
-        .eq('id', itemId);
+      const { data: sessionData } = await authClient.getSession();
+      const token = sessionData?.session?.token;
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      };
 
-      if (error) throw error;
+      const res = await fetch(`/api/wardrobe/${itemId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          wear_count: (currentItem?.wearCount || 0) + 1,
+          last_worn: new Date().toISOString(),
+        }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
 
       toast.success(`Marked "${itemName}" as worn today!`);
       fetchWardrobeItems(); // Refresh the data
