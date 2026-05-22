@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Calendar, DollarSign, Package, Plus } from 'lucide-react';
 import CreateRentalListingDialog from './CreateRentalListingDialog';
@@ -47,13 +47,13 @@ const RentalListingsDialog: React.FC<RentalListingsDialogProps> = ({
 
   const fetchRentalItems = async () => {
     try {
-      const { data, error } = await supabase
-        .from('rental_items')
-        .select('*')
-        .eq('is_available', true)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const { data: sessionData } = await authClient.getSession();
+      const headers: Record<string, string> = sessionData?.session
+        ? { 'Authorization': `Bearer ${sessionData.session.token}` }
+        : {};
+      const response = await fetch('/api/rentals', { headers });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
       setRentalItems((data as any[]) || []);
     } catch (error) {
       logger.error('Error fetching rental items:', error);

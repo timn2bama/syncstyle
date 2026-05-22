@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { logger } from "@/utils/logger";
@@ -37,6 +37,15 @@ export interface SocialOutfit {
   avg_rating?: number;
 }
 
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
+
 export function useSocialOutfits() {
   const [loading, setLoading] = useState(false);
   const { user } = useAuth();
@@ -44,28 +53,15 @@ export function useSocialOutfits() {
   const fetchPublicOutfits = useCallback(async (limit = 20, offset = 0) => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('outfits')
-        .select(`
-          id,
-          name,
-          description,
-          occasion,
-          season,
-          is_public,
-          created_at,
-          user_id,
-          outfit_items(
-            id,
-            wardrobe_items(id, name, category, color, photo_url)
-          )
-        `)
-        .eq('is_public', true)
-        .order('created_at', { ascending: false })
-        .range(offset, offset + limit - 1);
-
-      if (error) throw error;
-      return data as SocialOutfit[];
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/outfits', { headers });
+      if (!response.ok) throw new Error(await response.text());
+      const data: SocialOutfit[] = await response.json();
+      // Filter public outfits client-side and apply pagination
+      const publicOutfits = data
+        .filter(o => o.is_public)
+        .slice(offset, offset + limit);
+      return publicOutfits;
     } catch (error) {
       logger.error('Error fetching public outfits:', error);
       toast.error('Failed to load public outfits');
@@ -79,13 +75,13 @@ export function useSocialOutfits() {
     if (!user) return false;
 
     try {
-      const { error } = await supabase
-        .from('outfits')
-        .update({ is_public: isPublic })
-        .eq('id', outfitId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      const headers = await getAuthHeaders();
+      const response = await fetch(`/api/outfits/${outfitId}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ is_public: isPublic }),
+      });
+      if (!response.ok) throw new Error(await response.text());
 
       toast.success(isPublic ? 'Outfit shared publicly!' : 'Outfit made private');
       return true;
@@ -96,105 +92,32 @@ export function useSocialOutfits() {
     }
   }, [user]);
 
-  const likeOutfit = useCallback(async (outfitId: string) => {
-    if (!user) return false;
+  // TODO: implement social features when Prisma models added for outfit_likes, outfit_ratings, outfit_comments
 
-    try {
-      const { error } = await supabase
-        .from('outfit_likes')
-        .insert({ outfit_id: outfitId, user_id: user.id });
+  const likeOutfit = useCallback(async (_outfitId: string) => {
+    // TODO: implement when outfit_likes Prisma model is added
+    return false;
+  }, []);
 
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      logger.error('Error liking outfit:', error);
-      toast.error('Failed to like outfit');
-      return false;
-    }
-  }, [user]);
+  const unlikeOutfit = useCallback(async (_outfitId: string) => {
+    // TODO: implement when outfit_likes Prisma model is added
+    return false;
+  }, []);
 
-  const unlikeOutfit = useCallback(async (outfitId: string) => {
-    if (!user) return false;
+  const rateOutfit = useCallback(async (_outfitId: string, _rating: number) => {
+    // TODO: implement when outfit_ratings Prisma model is added
+    return false;
+  }, []);
 
-    try {
-      const { error } = await supabase
-        .from('outfit_likes')
-        .delete()
-        .eq('outfit_id', outfitId)
-        .eq('user_id', user.id);
+  const addComment = useCallback(async (_outfitId: string, _content: string) => {
+    // TODO: implement when outfit_comments Prisma model is added
+    return false;
+  }, []);
 
-      if (error) throw error;
-      return true;
-    } catch (error) {
-      logger.error('Error unliking outfit:', error);
-      toast.error('Failed to unlike outfit');
-      return false;
-    }
-  }, [user]);
-
-  const rateOutfit = useCallback(async (outfitId: string, rating: number) => {
-    if (!user || rating < 1 || rating > 5) return false;
-
-    try {
-      const { error } = await supabase
-        .from('outfit_ratings')
-        .upsert(
-          { outfit_id: outfitId, user_id: user.id, rating },
-          { onConflict: 'outfit_id,user_id' }
-        );
-
-      if (error) throw error;
-      toast.success('Rating submitted!');
-      return true;
-    } catch (error) {
-      logger.error('Error rating outfit:', error);
-      toast.error('Failed to submit rating');
-      return false;
-    }
-  }, [user]);
-
-  const addComment = useCallback(async (outfitId: string, content: string) => {
-    if (!user || !content.trim()) return false;
-
-    try {
-      const { error } = await supabase
-        .from('outfit_comments')
-        .insert({
-          outfit_id: outfitId,
-          user_id: user.id,
-          content: content.trim()
-        });
-
-      if (error) throw error;
-      toast.success('Comment added!');
-      return true;
-    } catch (error) {
-      logger.error('Error adding comment:', error);
-      toast.error('Failed to add comment');
-      return false;
-    }
-  }, [user]);
-
-  const fetchOutfitComments = useCallback(async (outfitId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('outfit_comments')
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          profiles!inner(display_name, avatar_url)
-        `)
-        .eq('outfit_id', outfitId)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      logger.error('Error fetching comments:', error);
-      return [];
-    }
+  const fetchOutfitComments = useCallback(async (_outfitId: string) => {
+    // TODO: implement when outfit_comments Prisma model is added
+    const comments: any[] = [];
+    return comments;
   }, []);
 
   return {

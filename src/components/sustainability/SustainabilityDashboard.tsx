@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Leaf, TrendingDown, Recycle, Droplets, Factory, Target, Loader2 } from 'lucide-react';
 import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
@@ -43,36 +43,30 @@ const SustainabilityDashboard = () => {
 
   const fetchSustainabilityData = async () => {
     if (!user) return;
-    
+
     try {
       setLoading(true);
-      // Fetch carbon footprint data
-      const { data: carbonData, error: carbonError } = await supabase
-        .from('carbon_footprint_items')
-        .select(`
-          *,
-          wardrobe_items(name, category, brand)
-        `)
-        .eq('user_id', user.id);
+      // POST /api/sustainability/carbon calculates and returns aggregated totals
+      const { data: sessionData } = await authClient.getSession();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        ...(sessionData?.session
+          ? { 'Authorization': `Bearer ${sessionData.session.token}` }
+          : {}),
+      };
+      const res = await fetch('/api/sustainability/carbon', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ user_id: user.id }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const result = await res.json();
 
-      if (carbonError) throw carbonError;
-      
-      const transformedData: CarbonFootprintItem[] = (carbonData || []).map(item => ({
-        id: item.id,
-        wardrobe_item_id: item.wardrobe_item_id,
-        manufacturing_impact: item.manufacturing_impact || 0,
-        transportation_impact: item.transportation_impact || 0,
-        usage_impact: item.usage_impact || 0,
-        disposal_impact: item.disposal_impact || 0,
-        total_footprint: item.total_footprint || 0,
-        wardrobe_items: item.wardrobe_items as any
-      }));
-
-      setCarbonFootprint(transformedData);
-
-      // Calculate total carbon footprint
-      const total = transformedData.reduce((sum, item) => sum + item.total_footprint, 0);
-      setTotalCarbonFootprint(total);
+      // The endpoint returns { total_footprint, items_calculated }
+      // Per-item breakdown is not available from this endpoint; items list is empty
+      // TODO: add GET /api/sustainability/carbon endpoint for per-item data
+      setCarbonFootprint([]);
+      setTotalCarbonFootprint(result.total_footprint || 0);
 
     } catch (error) {
       logger.error('Error fetching sustainability data:', error);
@@ -88,24 +82,17 @@ const SustainabilityDashboard = () => {
 
   const calculateCarbonFootprint = async () => {
     if (!user) return;
-    
+
     try {
       setCalculating(true);
-      
-      // Call edge function to calculate carbon footprint
-      const res = await fetch('/api/sustainability/carbon', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id })
-      });
-      if (!res.ok) throw new Error(await res.text());
+
+      // fetchSustainabilityData already calls POST /api/sustainability/carbon
+      await fetchSustainabilityData();
 
       toast({
         title: "Success",
         description: "Carbon footprint recalculated successfully!",
       });
-
-      fetchSustainabilityData();
     } catch (error) {
       logger.error('Error calculating carbon footprint:', error);
       toast({

@@ -6,9 +6,18 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 interface CreateRentalListingDialogProps {
   open: boolean;
@@ -54,12 +63,10 @@ const CreateRentalListingDialog: React.FC<CreateRentalListingDialogProps> = ({
   const fetchWardrobeItems = async () => {
     if (!user) return;
     try {
-      const { data, error } = await supabase
-        .from('wardrobe_items')
-        .select('id, name, category, brand, photo_url')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/wardrobe', { headers });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
       setWardrobeItems((data as any[]) || []);
     } catch (error) {
       logger.error('Error fetching wardrobe items:', error);
@@ -84,10 +91,11 @@ const CreateRentalListingDialog: React.FC<CreateRentalListingDialogProps> = ({
     setLoading(true);
     try {
       const selectedItem = wardrobeItems.find(i => i.id === formData.wardrobe_item_id);
-      const { error } = await supabase
-        .from('rental_items')
-        .insert({
-          owner_id: user.id,
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/rentals', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
           wardrobe_item_id: formData.wardrobe_item_id || null,
           title: formData.title,
           description: formData.description,
@@ -99,9 +107,10 @@ const CreateRentalListingDialog: React.FC<CreateRentalListingDialogProps> = ({
           care_instructions: formData.care_instructions,
           category: selectedItem?.category || 'other',
           brand: selectedItem?.brand || '',
-        });
+        }),
+      });
 
-      if (error) throw error;
+      if (!response.ok) throw new Error(await response.text());
 
       toast({
         title: "Success",

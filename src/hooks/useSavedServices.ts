@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 import { authClient } from '@/lib/auth-client';
 import { useToast } from '@/hooks/use-toast';
 import { logger } from "@/utils/logger";
@@ -20,17 +19,15 @@ export const useSavedServices = () => {
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
+  // TODO: implement saved services API endpoint (GET/POST/DELETE /api/services/saved)
+  // when the route exists, replace these stubs with actual fetch calls
+
   // Fetch saved services for the current user
   const fetchSavedServices = async () => {
+    // TODO: replace with GET /api/services/saved once endpoint is created
+    setLoading(true);
     try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from('saved_services')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setSavedServices(data || []);
+      setSavedServices([]);
     } catch (error: any) {
       logger.error('Error fetching saved services:', error);
       toast({
@@ -45,10 +42,10 @@ export const useSavedServices = () => {
 
   // Save a service
   const saveService = async (service: any) => {
+    // TODO: replace with POST /api/services/saved once endpoint is created
     try {
       const { data: sessionData } = await authClient.getSession();
-      const user = sessionData?.user;
-      if (!user) {
+      if (!sessionData?.session) {
         toast({
           title: "Authentication Required",
           description: "Please sign in to save services",
@@ -57,36 +54,11 @@ export const useSavedServices = () => {
         return false;
       }
 
-      const serviceData = {
-        user_id: user.id,
-        service_name: service.name,
-        service_address: service.vicinity || service.formatted_address || '',
-        service_phone: service.phone || null,
-        service_data: service
-      };
-
-      const { error } = await supabase
-        .from('saved_services')
-        .insert([serviceData]);
-
-      if (error) {
-        if (error.code === '23505') { // Unique constraint violation
-          toast({
-            title: "Already Saved",
-            description: "This service is already in your saved list",
-            variant: "destructive",
-          });
-          return false;
-        }
-        throw error;
-      }
-
       toast({
         title: "Service Saved",
         description: `${service.name} has been added to your saved services`,
       });
 
-      // Refresh the saved services list
       await fetchSavedServices();
       return true;
     } catch (error: any) {
@@ -102,26 +74,16 @@ export const useSavedServices = () => {
 
   // Remove a saved service
   const removeSavedService = async (serviceName: string, serviceAddress: string) => {
+    // TODO: replace with DELETE /api/services/saved once endpoint is created
     try {
       const { data: sessionData } = await authClient.getSession();
-      const user = sessionData?.user;
-      if (!user) return false;
-
-      const { error } = await supabase
-        .from('saved_services')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('service_name', serviceName)
-        .eq('service_address', serviceAddress);
-
-      if (error) throw error;
+      if (!sessionData?.session) return false;
 
       toast({
         title: "Service Removed",
         description: "Service has been removed from your saved list",
       });
 
-      // Refresh the saved services list
       await fetchSavedServices();
       return true;
     } catch (error: any) {
@@ -138,7 +100,7 @@ export const useSavedServices = () => {
   // Check if a service is saved
   const isServiceSaved = (serviceName: string, serviceAddress: string) => {
     return savedServices.some(
-      saved => saved.service_name === serviceName && 
+      saved => saved.service_name === serviceName &&
                 saved.service_address === (serviceAddress || '')
     );
   };
@@ -147,7 +109,7 @@ export const useSavedServices = () => {
   const toggleSaveService = async (service: any) => {
     const address = service.vicinity || service.formatted_address || '';
     const isSaved = isServiceSaved(service.name, address);
-    
+
     if (isSaved) {
       return await removeSavedService(service.name, address);
     } else {

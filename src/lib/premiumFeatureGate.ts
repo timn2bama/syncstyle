@@ -1,6 +1,50 @@
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import type { PremiumFeature, SubscriptionTier, UpgradeModalData } from '@/types/premium';
 import { logger } from "@/utils/logger";
+
+// TODO: replace with GET /api/subscription-tiers when endpoint is created
+// Hardcoded tier feature config (mostly static configuration data)
+const HARDCODED_TIERS: Record<string, { features: PremiumFeature[]; limits: Record<string, any> }> = {
+  free: {
+    features: [],
+    limits: { ai_recommendations_per_month: 5, photo_uploads_per_month: 3, outfit_generations_per_month: 3 },
+  },
+  Premium: {
+    features: [
+      'weather_integration',
+      'marketplace_access',
+      'advanced_analytics',
+      'unlimited_wardrobe',
+      'sustainability_tracking',
+      'rental_marketplace',
+    ],
+    limits: { ai_recommendations_per_month: 50, photo_uploads_per_month: 100, outfit_generations_per_month: 50 },
+  },
+  Enterprise: {
+    features: [
+      'weather_integration',
+      'marketplace_access',
+      'advanced_analytics',
+      'unlimited_wardrobe',
+      'sustainability_tracking',
+      'rental_marketplace',
+      'ai_outfit_suggestions',
+      'social_sharing',
+      'personal_stylist',
+      'team_collaboration',
+    ],
+    limits: { ai_recommendations_per_month: -1, photo_uploads_per_month: -1, outfit_generations_per_month: -1 },
+  },
+};
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 class PremiumFeatureGate {
   private featureMetadata: Record<PremiumFeature, { name: string; benefits: string[]; requiredTier: string }> = {
@@ -97,16 +141,23 @@ class PremiumFeatureGate {
     },
   };
 
-  async checkFeatureAccess(userId: string, feature: PremiumFeature): Promise<boolean> {
+  private async getSubscription(): Promise<{ subscribed: boolean; subscription_tier: string | null; subscription_end: string | null }> {
     try {
-      // Get user's subscription
-      const { data: subscription } = await supabase
-        .from('subscribers')
-        .select('subscription_tier, subscribed, subscription_end')
-        .eq('user_id', userId)
-        .single();
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/subscriptions/check', { method: 'POST', headers });
+      if (!response.ok) return { subscribed: false, subscription_tier: null, subscription_end: null };
+      return await response.json();
+    } catch (error) {
+      logger.error('Error fetching subscription:', error);
+      return { subscribed: false, subscription_tier: null, subscription_end: null };
+    }
+  }
 
-      if (!subscription || !subscription.subscribed) {
+  async checkFeatureAccess(_userId: string, feature: PremiumFeature): Promise<boolean> {
+    try {
+      const subscription = await this.getSubscription();
+
+      if (!subscription.subscribed) {
         return false;
       }
 
@@ -115,66 +166,31 @@ class PremiumFeatureGate {
         return false;
       }
 
-      // Get tier details
-      const { data: tier } = await supabase
-        .from('subscription_tiers')
-        .select('features, tier_name')
-        .eq('tier_name', subscription.subscription_tier || 'free')
-        .eq('is_active', true)
-        .single();
-
-      if (!tier) {
-        return false;
-      }
-
-      // Check if feature is included in the tier
-      const tierFeatures = tier.features as PremiumFeature[];
-      return tierFeatures.includes(feature);
+      const tierName = subscription.subscription_tier || 'free';
+      const tier = HARDCODED_TIERS[tierName] || HARDCODED_TIERS['free'];
+      return tier.features.includes(feature);
     } catch (error) {
       logger.error('Error checking feature access:', error);
       return false;
     }
   }
 
-  async checkUsageLimit(userId: string, usageType: 'ai_recommendations' | 'photo_uploads' | 'outfit_generations'): Promise<{ allowed: boolean; remaining: number | null }> {
+  async checkUsageLimit(_userId: string, usageType: 'ai_recommendations' | 'photo_uploads' | 'outfit_generations'): Promise<{ allowed: boolean; remaining: number | null }> {
     try {
-      // Get user's subscription and tier
-      const { data: subscription } = await supabase
-        .from('subscribers')
-        .select('subscription_tier, subscribed')
-        .eq('user_id', userId)
-        .single();
+      const subscription = await this.getSubscription();
 
-      if (!subscription || !subscription.subscribed) {
-        // Free tier - very limited
-        const freeLimit = usageType === 'ai_recommendations' ? 5 : 3;
-        const usage = await this.getCurrentUsage(userId, usageType);
-        return {
-          allowed: usage < freeLimit,
-          remaining: Math.max(0, freeLimit - usage),
-        };
-      }
-
-      const { data: tier } = await supabase
-        .from('subscription_tiers')
-        .select('limits')
-        .eq('tier_name', subscription.subscription_tier || 'free')
-        .single();
-
-      if (!tier || !tier.limits) {
-        return { allowed: false, remaining: 0 };
-      }
-
-      const limits = tier.limits as Record<string, any>;
+      const tierName = subscription.subscribed ? (subscription.subscription_tier || 'free') : 'free';
+      const tier = HARDCODED_TIERS[tierName] || HARDCODED_TIERS['free'];
+      const limits = tier.limits;
       const limit = limits[`${usageType}_per_month`];
-      
-      // Unlimited usage
+
       if (limit === -1) {
         return { allowed: true, remaining: null };
       }
 
-      const usage = await this.getCurrentUsage(userId, usageType);
-      
+      // TODO: replace with GET /api/usage-tracking when endpoint is created
+      const usage = 0; // stub: usage_count always 0 until endpoint exists
+
       return {
         allowed: usage < limit,
         remaining: Math.max(0, limit - usage),
@@ -185,58 +201,30 @@ class PremiumFeatureGate {
     }
   }
 
-  private async getCurrentUsage(userId: string, usageType: string): Promise<number> {
-    const now = new Date();
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
-
-    const { data } = await supabase
-      .from('usage_tracking')
-      .select('usage_count')
-      .eq('user_id', userId)
-      .eq('usage_type', usageType)
-      .gte('billing_period_start', startOfMonth.toISOString())
-      .lte('billing_period_end', endOfMonth.toISOString());
-
-    return data?.reduce((sum, item) => sum + (item.usage_count || 0), 0) || 0;
-  }
-
-  async getUpgradePromptData(userId: string, feature: PremiumFeature): Promise<UpgradeModalData> {
+  async getUpgradePromptData(_userId: string, feature: PremiumFeature): Promise<UpgradeModalData> {
     const metadata = this.featureMetadata[feature];
-    
-    // Get current subscription
-    const { data: subscription } = await supabase
-      .from('subscribers')
-      .select('subscription_tier')
-      .eq('user_id', userId)
-      .maybeSingle();
 
-    const currentTier = subscription?.subscription_tier || 'free';
+    const subscription = await this.getSubscription();
+    const currentTier = subscription.subscription_tier || 'free';
 
-    // Get recommended tier for this feature
-    const { data: tiers } = await supabase
-      .from('subscription_tiers')
-      .select('*')
-      .eq('is_active', true)
-      .order('price_monthly', { ascending: true });
+    // Find the first tier that includes the requested feature
+    const recommendedTierEntry = Object.entries(HARDCODED_TIERS).find(([, tierData]) =>
+      tierData.features.includes(feature)
+    );
 
-    const recommendedTierData = tiers?.find(tier => {
-      const features = tier.features as PremiumFeature[];
-      return features.includes(feature);
-    });
+    const recommendedTier = recommendedTierEntry
+      ? ({
+          tier_name: recommendedTierEntry[0],
+          name: recommendedTierEntry[0],
+          features: recommendedTierEntry[1].features,
+          limits: recommendedTierEntry[1].limits,
+          advanced_analytics: recommendedTierEntry[1].limits?.advanced_analytics || false,
+          personal_stylist: recommendedTierEntry[1].limits?.personal_stylist || false,
+        } as unknown as SubscriptionTier)
+      : null;
 
-    // Map to SubscriptionTier type
-    const recommendedTier = recommendedTierData ? {
-      ...recommendedTierData,
-      name: recommendedTierData.tier_name,
-      features: recommendedTierData.features as PremiumFeature[],
-      limits: recommendedTierData.limits as any,
-      advanced_analytics: (recommendedTierData.limits as any)?.advanced_analytics || false,
-      personal_stylist: (recommendedTierData.limits as any)?.personal_stylist || false,
-    } as SubscriptionTier : null;
-
-    // Check trial eligibility
-    const trialAvailable = await this.checkTrialEligibility(userId);
+    // TODO: implement proper trial eligibility check via API
+    const trialAvailable = !subscription.subscribed;
 
     return {
       feature,
@@ -246,18 +234,6 @@ class PremiumFeatureGate {
       recommendedTier,
       trialAvailable,
     };
-  }
-
-  private async checkTrialEligibility(userId: string): Promise<boolean> {
-    // Check if user has ever had a paid subscription
-    const { data } = await supabase
-      .from('subscribers')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('subscribed', true);
-
-    // Eligible for trial if never subscribed
-    return !data || data.length === 0;
   }
 
   getFeatureBenefits(feature: PremiumFeature): string[] {

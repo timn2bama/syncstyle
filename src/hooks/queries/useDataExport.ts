@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { toast } from 'sonner';
 import { logger } from "@/utils/logger";
 
@@ -10,6 +10,15 @@ interface UserData {
   outfits: any[];
   outfitItems: any[];
 }
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 export function useDataExport() {
   const { user } = useAuth();
@@ -22,21 +31,31 @@ export function useDataExport() {
     }
 
     setIsExporting(true);
-    
+
     try {
-      // Fetch all user data
-      const [profileResult, wardrobeResult, outfitsResult, outfitItemsResult] = await Promise.all([
-        supabase.from('profiles').select('*').eq('user_id', user.id).single(),
-        supabase.from('wardrobe_items').select('*').eq('user_id', user.id),
-        supabase.from('outfits').select('*').eq('user_id', user.id),
-        supabase.from('outfit_items').select('*').eq('outfit_id', user.id) // This needs a join, but simplified for now
+      const headers = await getAuthHeaders();
+
+      // Fetch all user data in parallel
+      const [profileResponse, wardrobeResponse, outfitsResponse] = await Promise.all([
+        fetch('/api/profile', { headers }),
+        fetch('/api/wardrobe', { headers }),
+        fetch('/api/outfits', { headers }),
       ]);
 
+      const [profile, wardrobeItems, outfits] = await Promise.all([
+        profileResponse.ok ? profileResponse.json() : null,
+        wardrobeResponse.ok ? wardrobeResponse.json() : [],
+        outfitsResponse.ok ? outfitsResponse.json() : [],
+      ]);
+
+      // outfit_items are already nested inside each outfit as `items`
+      const outfitItems = (outfits as any[]).flatMap((o: any) => o.items || []);
+
       const userData: UserData = {
-        profile: profileResult.data,
-        wardrobeItems: wardrobeResult.data || [],
-        outfits: outfitsResult.data || [],
-        outfitItems: outfitItemsResult.data || []
+        profile,
+        wardrobeItems: wardrobeItems || [],
+        outfits: outfits || [],
+        outfitItems,
       };
 
       // Create downloadable JSON file
@@ -71,14 +90,30 @@ export function useDataExport() {
     }
 
     try {
-      // Delete in order due to foreign key constraints
-      await supabase.from('outfit_items').delete().in('outfit_id', 
-        (await supabase.from('outfits').select('id').eq('user_id', user.id)).data?.map(o => o.id) || []
+      const headers = await getAuthHeaders();
+
+      // Fetch outfits and wardrobe items to get IDs for deletion
+      const [outfitsResponse, wardrobeResponse] = await Promise.all([
+        fetch('/api/outfits', { headers }),
+        fetch('/api/wardrobe', { headers }),
+      ]);
+
+      const outfits: any[] = outfitsResponse.ok ? await outfitsResponse.json() : [];
+      const wardrobeItems: any[] = wardrobeResponse.ok ? await wardrobeResponse.json() : [];
+
+      // Delete outfits (cascade deletes outfit_items via Prisma)
+      await Promise.all(
+        outfits.map((o: any) =>
+          fetch(`/api/outfits/${o.id}`, { method: 'DELETE', headers })
+        )
       );
-      
-      await supabase.from('outfits').delete().eq('user_id', user.id);
-      await supabase.from('wardrobe_items').delete().eq('user_id', user.id);
-      await supabase.from('profiles').delete().eq('user_id', user.id);
+
+      // Delete wardrobe items
+      await Promise.all(
+        wardrobeItems.map((item: any) =>
+          fetch(`/api/wardrobe/${item.id}`, { method: 'DELETE', headers })
+        )
+      );
 
       toast.success('All your data has been permanently deleted');
       return true;

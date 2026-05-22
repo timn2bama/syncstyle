@@ -1,7 +1,16 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '@/integrations/supabase/client'; // DB queries only
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 interface Integration {
   id: string;
@@ -28,12 +37,10 @@ export const useIntegrations = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('integration_settings')
-        .select('*')
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      const headers = await getAuthHeaders();
+      const response = await fetch('/api/integrations', { headers });
+      if (!response.ok) throw new Error(await response.text());
+      const data = await response.json();
       setIntegrations(data || []);
     } catch (error) {
       logger.error('Error fetching integrations:', error);
@@ -50,30 +57,23 @@ export const useIntegrations = () => {
     if (!user) return;
 
     try {
+      const headers = await getAuthHeaders();
       const existing = integrations.find(i => i.integration_type === integrationType);
 
       if (existing) {
-        const { error } = await supabase
-          .from('integration_settings')
-          .update({
-            settings,
-            is_active: isActive,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', existing.id);
-
-        if (error) throw error;
+        const response = await fetch('/api/integrations', {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ integration_type: integrationType, settings, is_active: isActive }),
+        });
+        if (!response.ok) throw new Error(await response.text());
       } else {
-        const { error } = await supabase
-          .from('integration_settings')
-          .insert({
-            user_id: user.id,
-            integration_type: integrationType,
-            settings,
-            is_active: isActive
-          });
-
-        if (error) throw error;
+        const response = await fetch('/api/integrations', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ integration_type: integrationType, settings }),
+        });
+        if (!response.ok) throw new Error(await response.text());
       }
 
       fetchIntegrations(); // Refresh data
