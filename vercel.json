@@ -1,30 +1,43 @@
 {
-  "git": {
-    "deploymentEnabled": false
-  },
   "functions": {
     "api/**/*.ts": {
-      "runtime": "@vercel/node@5"
+      "runtime": "@vercel/node@3"
     }
   },
   "rewrites": [
     { "source": "/api/auth/(.*)", "destination": "/api/auth/[...auth]" },
+    { "source": "/api/wardrobe/:id/items", "destination": "/api/outfits/[id]/items" },
     { "source": "/api/wardrobe/:id", "destination": "/api/wardrobe/[id]" },
+    { "source": "/api/outfits/:id/items", "destination": "/api/outfits/[id]/items" },
     { "source": "/api/outfits/:id", "destination": "/api/outfits/[id]" },
     { "source": "/api/marketplace/:id", "destination": "/api/marketplace/[id]" },
     { "source": "/api/webhooks/stripe", "destination": "/api/webhooks/stripe" },
     { "source": "/api/subscriptions/checkout", "destination": "/api/subscriptions/checkout" },
     { "source": "/api/subscriptions/portal", "destination": "/api/subscriptions/portal" },
     { "source": "/api/subscriptions/check", "destination": "/api/subscriptions/check" },
+    { "source": "/api/subscriptions/index", "destination": "/api/subscriptions/index" },
     { "source": "/api/ai/daily-stylist", "destination": "/api/ai/daily-stylist" },
     { "source": "/api/ai/smart-outfit", "destination": "/api/ai/smart-outfit" },
     { "source": "/api/ai/claude-analysis", "destination": "/api/ai/claude-analysis" },
-    { "source": "/api/weather/multiple", "destination": "/api/weather/multiple" },
+    { "source": "/api/daily-outfit", "destination": "/api/daily-outfit/index" },
+    { "source": "/api/integrations", "destination": "/api/integrations/index" },
+    { "source": "/api/rentals", "destination": "/api/rentals/index" },
+    { "source": "/api/style-preferences", "destination": "/api/style-preferences/index" },
+    { "source": "/api/outfit-wear-log", "destination": "/api/outfit-wear-log/index" },
+    { "source": "/api/social/outfits", "destination": "/api/social/outfits" },
+    { "source": "/api/events", "destination": "/api/events/index" },
+    { "source": "/api/style-evolution", "destination": "/api/style-evolution/index" },
+    { "source": "/api/services/saved", "destination": "/api/services/saved" },
     { "source": "/api/services/local", "destination": "/api/services/local" },
+    { "source": "/api/weather/index", "destination": "/api/weather/index" },
+    { "source": "/api/weather/multiple", "destination": "/api/weather/multiple" },
     { "source": "/api/wardrobe/reset", "destination": "/api/wardrobe/reset" },
     { "source": "/api/wardrobe/populate-sample", "destination": "/api/wardrobe/populate-sample" },
     { "source": "/api/sustainability/carbon", "destination": "/api/sustainability/carbon" },
     { "source": "/api/vision/analyze", "destination": "/api/vision/analyze" },
+    { "source": "/api/storage/upload", "destination": "/api/storage/upload" },
+    { "source": "/api/profile", "destination": "/api/profile/index" },
+    { "source": "/api/analytics", "destination": "/api/analytics/index" },
     { "source": "/api/logs/error", "destination": "/api/logs/error" },
     { "source": "/api/logs/performance", "destination": "/api/logs/performance" },
     { "source": "/api/logs/rum", "destination": "/api/logs/rum" },
