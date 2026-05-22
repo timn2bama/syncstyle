@@ -3,11 +3,20 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { Heart, ThumbsUp, ThumbsDown, Meh, Star, Calendar, Cloud, Loader2 } from 'lucide-react';
 import { useOutfitLogging } from '@/hooks/useOutfitLogging';
 import { logger } from "@/utils/logger";
 import type { DailyOutfitSuggestion as DailyOutfitSuggestionData, OutfitItem } from '@/types/ai';
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 interface DailyOutfitSuggestionProps {
   suggestions: DailyOutfitSuggestionData[];
@@ -25,13 +34,18 @@ const DailyOutfitSuggestion: React.FC<DailyOutfitSuggestionProps> = ({
   const handleFeedback = async (suggestionId: string, feedback: string) => {
     try {
       setLoading(true);
-      
-      const { error } = await supabase
-        .from('daily_outfit_suggestions')
-        .update({ user_feedback: feedback })
-        .eq('id', suggestionId);
 
-      if (error) throw error;
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/daily-outfit?id=${suggestionId}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ user_feedback: feedback }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to record feedback');
+      }
 
       toast({
         title: "Feedback Recorded",
@@ -77,12 +91,17 @@ const DailyOutfitSuggestion: React.FC<DailyOutfitSuggestionProps> = ({
       });
 
       // Mark suggestion as worn
-      const { error } = await supabase
-        .from('daily_outfit_suggestions')
-        .update({ was_worn: true })
-        .eq('id', suggestion.id);
+      const headers = await getAuthHeaders();
+      const res = await fetch(`/api/daily-outfit?id=${suggestion.id}`, {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ was_worn: true }),
+      });
 
-      if (error) throw error;
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Failed to mark outfit as worn');
+      }
 
       toast({
         title: "Outfit Logged & Marked as Worn",

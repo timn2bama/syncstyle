@@ -1,7 +1,17 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
 import { logger } from "@/utils/logger";
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 export interface WardrobeItem {
   id: string;
@@ -101,31 +111,23 @@ export const useOutfitSuggestions = (onOutfitCreated?: () => void) => {
 
     setSaving(suggestion.id);
     try {
-      const { data: outfit, error: outfitError } = await supabase
-        .from('outfits')
-        .insert({
-          user_id: user.id,
+      const headers = await getAuthHeaders();
+
+      const outfitRes = await fetch('/api/outfits', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
           name: suggestion.name,
           description: `${suggestion.reason}\n\nStyle Notes: ${suggestion.styleNotes}`,
           occasion: suggestion.occasion,
-          season: getSeasonFromWeather(weather?.temperature || 70)
-        })
-        .select()
-        .single();
+          season: getSeasonFromWeather(weather?.temperature || 70),
+          items: suggestion.items.map(item => item.id),
+        }),
+      });
 
-      if (outfitError) throw outfitError;
-
-      if (suggestion.items.length > 0) {
-        const outfitItems = suggestion.items.map(item => ({
-          outfit_id: outfit.id,
-          wardrobe_item_id: item.id
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('outfit_items')
-          .insert(outfitItems);
-
-        if (itemsError) throw itemsError;
+      if (!outfitRes.ok) {
+        const err = await outfitRes.json();
+        throw new Error(err.error || 'Failed to save outfit');
       }
 
       toast.success(`Saved "${suggestion.name}" to your outfits!`);

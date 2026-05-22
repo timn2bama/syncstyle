@@ -3,12 +3,21 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/components/ui/use-toast';
-import { supabase } from '@/integrations/supabase/client';
+import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { Sparkles, Calendar, TrendingUp, ShoppingBag, Heart, Star } from 'lucide-react';
 import DailyOutfitSuggestion from './DailyOutfitSuggestion';
 import { logger } from "@/utils/logger";
 import type { DailyOutfitSuggestion as DailyOutfitSuggestionType, EventOutfitRequest, StyleEvolution } from '@/types/ai';
+
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const { data: sessionData } = await authClient.getSession();
+  if (!sessionData?.session) return {};
+  return {
+    'Authorization': `Bearer ${sessionData.session.token}`,
+    'Content-Type': 'application/json',
+  };
+};
 
 const AIStylistDashboard = () => {
   const { user } = useAuth();
@@ -30,36 +39,31 @@ const AIStylistDashboard = () => {
 
     try {
       // Fetch daily outfit suggestions
-      const { data: suggestionsData, error: suggestionsError } = await supabase
-        .from('daily_outfit_suggestions')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('suggestion_date', { ascending: false })
-        .limit(10);
-
-      if (suggestionsError) throw suggestionsError;
+      const headers = await getAuthHeaders();
+      const suggestionsRes = await fetch('/api/daily-outfit', { headers });
+      if (!suggestionsRes.ok) {
+        const err = await suggestionsRes.json();
+        throw new Error(err.error || 'Failed to fetch daily outfit suggestions');
+      }
+      const suggestionsData = await suggestionsRes.json();
       setOutfitSuggestions((suggestionsData as DailyOutfitSuggestionType[]) || []);
 
-      // Fetch event outfit requests
-      const { data: eventsData, error: eventsError } = await supabase
-        .from('event_outfit_requests')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('event_date', { ascending: false });
+      // TODO: implement when Prisma model added
+      // const { data: eventsData, error: eventsError } = await supabase
+      //   .from('event_outfit_requests')
+      //   .select('*')
+      //   .eq('user_id', user.id)
+      //   .order('event_date', { ascending: false });
+      setEventRequests([]);
 
-      if (eventsError) throw eventsError;
-      setEventRequests((eventsData as EventOutfitRequest[]) || []);
-
-      // Fetch style evolution data
-      const { data: evolutionData, error: evolutionError } = await supabase
-        .from('style_evolution_tracking')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('tracking_date', { ascending: false })
-        .limit(30);
-
-      if (evolutionError) throw evolutionError;
-      setStyleEvolution((evolutionData as StyleEvolution[]) || []);
+      // TODO: implement when Prisma model added
+      // const { data: evolutionData, error: evolutionError } = await supabase
+      //   .from('style_evolution_tracking')
+      //   .select('*')
+      //   .eq('user_id', user.id)
+      //   .order('tracking_date', { ascending: false })
+      //   .limit(30);
+      setStyleEvolution([]);
 
     } catch (error) {
       logger.error('Error fetching stylist data:', error);
