@@ -2,9 +2,9 @@
 // Licensed under the Apache License, Version 2.0.
 // See the LICENSE file in the project root for license information.
 import { useState, useCallback } from "react";
-import { authClient } from "@/lib/auth-client";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/utils/logger";
+import api from '@/lib/api';
 
 interface WardrobeItem {
   id: string;
@@ -126,15 +126,7 @@ export const useOutfitRecommendations = () => {
 
     setLoading(true);
     try {
-      const { data: sessionData } = await authClient.getSession();
-      const token = sessionData?.session?.token;
-      const headers: Record<string, string> = token
-        ? { 'Authorization': `Bearer ${token}` }
-        : {};
-
-      const res = await fetch('/api/wardrobe', { headers });
-      if (!res.ok) throw new Error(await res.text());
-      const wardrobeItems = await res.json();
+      const wardrobeItems = await api.get('/wardrobe');
 
       // Simple outfit recommendation algorithm
       const outfitSuggestions = generateOutfitCombinations(wardrobeItems, baseItem);
@@ -150,27 +142,13 @@ export const useOutfitRecommendations = () => {
     if (!user) return;
 
     try {
-      const { data: sessionData } = await authClient.getSession();
-      const token = sessionData?.session?.token;
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
-      };
-
-      const res = await fetch('/api/outfits', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          name,
-          description: suggestion.description,
-          occasion: suggestion.occasion,
-          season: suggestion.season,
-          items: suggestion.items.map(item => item.id),
-        }),
+      return await api.post('/outfits', {
+        name,
+        description: suggestion.description,
+        occasion: suggestion.occasion,
+        season: suggestion.season,
+        items: suggestion.items.map(item => item.id),
       });
-
-      if (!res.ok) throw new Error(await res.text());
-      return res.json();
     } catch (error) {
       logger.error('Error creating outfit from suggestion:', error);
       throw error;

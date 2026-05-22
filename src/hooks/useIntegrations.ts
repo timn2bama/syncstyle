@@ -1,16 +1,7 @@
 import { useState, useEffect } from 'react';
-import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from "@/utils/logger";
-
-const getAuthHeaders = async (): Promise<Record<string, string>> => {
-  const { data: sessionData } = await authClient.getSession();
-  if (!sessionData?.session) return {};
-  return {
-    'Authorization': `Bearer ${sessionData.session.token}`,
-    'Content-Type': 'application/json',
-  };
-};
+import api from '@/lib/api';
 
 interface Integration {
   id: string;
@@ -37,10 +28,7 @@ export const useIntegrations = () => {
     if (!user) return;
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('/api/integrations', { headers });
-      if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
+      const data = await api.get('/integrations');
       setIntegrations(data || []);
     } catch (error) {
       logger.error('Error fetching integrations:', error);
@@ -57,23 +45,12 @@ export const useIntegrations = () => {
     if (!user) return;
 
     try {
-      const headers = await getAuthHeaders();
       const existing = integrations.find(i => i.integration_type === integrationType);
 
       if (existing) {
-        const response = await fetch('/api/integrations', {
-          method: 'PUT',
-          headers,
-          body: JSON.stringify({ integration_type: integrationType, settings, is_active: isActive }),
-        });
-        if (!response.ok) throw new Error(await response.text());
+        await api.put('/integrations', { integration_type: integrationType, settings, is_active: isActive });
       } else {
-        const response = await fetch('/api/integrations', {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ integration_type: integrationType, settings }),
-        });
-        if (!response.ok) throw new Error(await response.text());
+        await api.post('/integrations', { integration_type: integrationType, settings });
       }
 
       fetchIntegrations(); // Refresh data
@@ -90,13 +67,7 @@ export const useIntegrations = () => {
   // Weather integration
   const getWeatherRecommendations = async (location: string) => {
     try {
-      const res = await fetch('/api/weather', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ location })
-      });
-      if (!res.ok) throw new Error(await res.text());
-      return await res.json();
+      return await api.post('/weather', { location });
     } catch (error) {
       logger.error('Error getting weather recommendations:', error);
       return null;

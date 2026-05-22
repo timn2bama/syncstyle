@@ -1,17 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
-import { authClient } from '@/lib/auth-client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { logger } from "@/utils/logger";
-
-const getAuthHeaders = async (): Promise<Record<string, string>> => {
-  const { data: sessionData } = await authClient.getSession();
-  if (!sessionData?.session) return {};
-  return {
-    'Authorization': `Bearer ${sessionData.session.token}`,
-    'Content-Type': 'application/json',
-  };
-};
+import api from '@/lib/api';
 
 export interface StylePreferences {
   user_id: string;
@@ -41,10 +32,7 @@ export function useStylePreferences() {
 
     setLoading(true);
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('/api/style-preferences', { headers });
-      if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
+      const data = await api.get('/style-preferences');
       // API returns {} when no preferences exist
       setPreferences(Object.keys(data).length > 0 ? (data as StylePreferences) : null);
     } catch (error) {
@@ -58,14 +46,7 @@ export function useStylePreferences() {
     if (!user) return false;
 
     try {
-      const headers = await getAuthHeaders();
-      const response = await fetch('/api/style-preferences', {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify(updates),
-      });
-      if (!response.ok) throw new Error(await response.text());
-      const data = await response.json();
+      const data = await api.put('/style-preferences', updates);
       setPreferences(data as StylePreferences);
       toast.success('Style preferences updated!');
       return true;

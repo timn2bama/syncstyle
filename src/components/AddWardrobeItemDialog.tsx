@@ -1,4 +1,5 @@
 import { useState } from "react";
+import api from '@/lib/api';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -149,17 +150,9 @@ const AddWardrobeItemDialog = ({ onItemAdded }: AddWardrobeItemDialogProps) => {
         const formData = new FormData();
         formData.append('file', selectedFile);
 
-        const uploadResponse = await fetch('/api/storage/upload', {
-          method: 'POST',
-          body: formData,
+        const { url } = await api.post('/storage/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
         });
-
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json().catch(() => ({ error: 'Upload failed' }));
-          throw new Error(errorData.error || 'Upload failed');
-        }
-
-        const { url } = await uploadResponse.json();
         photoUrl = url;
       } catch (error) {
         logger.error('Photo upload failed:', error);

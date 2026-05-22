@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { authClient } from '@/lib/auth-client';
 import { toast } from 'sonner';
 import { logger } from "@/utils/logger";
+import api from '@/lib/api';
 
 interface UserData {
   profile: any;
@@ -10,15 +10,6 @@ interface UserData {
   outfits: any[];
   outfitItems: any[];
 }
-
-const getAuthHeaders = async (): Promise<Record<string, string>> => {
-  const { data: sessionData } = await authClient.getSession();
-  if (!sessionData?.session) return {};
-  return {
-    'Authorization': `Bearer ${sessionData.session.token}`,
-    'Content-Type': 'application/json',
-  };
-};
 
 export function useDataExport() {
   const { user } = useAuth();
@@ -33,19 +24,11 @@ export function useDataExport() {
     setIsExporting(true);
 
     try {
-      const headers = await getAuthHeaders();
-
       // Fetch all user data in parallel
-      const [profileResponse, wardrobeResponse, outfitsResponse] = await Promise.all([
-        fetch('/api/profile', { headers }),
-        fetch('/api/wardrobe', { headers }),
-        fetch('/api/outfits', { headers }),
-      ]);
-
       const [profile, wardrobeItems, outfits] = await Promise.all([
-        profileResponse.ok ? profileResponse.json() : null,
-        wardrobeResponse.ok ? wardrobeResponse.json() : [],
-        outfitsResponse.ok ? outfitsResponse.json() : [],
+        api.get('/profile').catch(() => null),
+        api.get('/wardrobe').catch(() => []),
+        api.get('/outfits').catch(() => []),
       ]);
 
       // outfit_items are already nested inside each outfit as `items`
@@ -90,29 +73,20 @@ export function useDataExport() {
     }
 
     try {
-      const headers = await getAuthHeaders();
-
       // Fetch outfits and wardrobe items to get IDs for deletion
-      const [outfitsResponse, wardrobeResponse] = await Promise.all([
-        fetch('/api/outfits', { headers }),
-        fetch('/api/wardrobe', { headers }),
+      const [outfits, wardrobeItems]: [any[], any[]] = await Promise.all([
+        api.get('/outfits').catch(() => []),
+        api.get('/wardrobe').catch(() => []),
       ]);
-
-      const outfits: any[] = outfitsResponse.ok ? await outfitsResponse.json() : [];
-      const wardrobeItems: any[] = wardrobeResponse.ok ? await wardrobeResponse.json() : [];
 
       // Delete outfits (cascade deletes outfit_items via Prisma)
       await Promise.all(
-        outfits.map((o: any) =>
-          fetch(`/api/outfits/${o.id}`, { method: 'DELETE', headers })
-        )
+        outfits.map((o: any) => api.delete(`/outfits/${o.id}`))
       );
 
       // Delete wardrobe items
       await Promise.all(
-        wardrobeItems.map((item: any) =>
-          fetch(`/api/wardrobe/${item.id}`, { method: 'DELETE', headers })
-        )
+        wardrobeItems.map((item: any) => api.delete(`/wardrobe/${item.id}`))
       );
 
       toast.success('All your data has been permanently deleted');
